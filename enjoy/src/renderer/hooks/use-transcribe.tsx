@@ -4,102 +4,102 @@ import {
 } from "@renderer/context";
 import OpenAI from "openai";
 import { useContext } from "react";
-import { toast } from "@renderer/components/ui";
 import { t } from "i18next";
-import { fetchFile } from "@ffmpeg/util";
 import { AI_WORKER_ENDPOINT } from "@/constants";
 import * as sdk from "microsoft-cognitiveservices-speech-sdk";
 import axios from "axios";
-import take from "lodash/take";
-import sortedUniqBy from "lodash/sortedUniqBy";
-import {
-  groupTranscription,
-  END_OF_WORD_REGEX,
-  milisecondsToTimestamp,
-} from "@/utils";
+import { AlignmentResult } from "echogarden/dist/api/API.d.js";
+import { useAiCommand } from "./use-ai-command";
 
 export const useTranscribe = () => {
-  const { EnjoyApp, ffmpegWasm, ffmpegValid, user, webApi } = useContext(
+  const { EnjoyApp, user, webApi, learningLanguage } = useContext(
     AppSettingsProviderContext
   );
   const { whisperConfig, openai } = useContext(AISettingsProviderContext);
+  const { punctuateText } = useAiCommand();
 
-  const transcode = async (src: string | Blob, options?: string[]) => {
-    if (ffmpegValid) {
-      if (src instanceof Blob) {
-        src = await EnjoyApp.cacheObjects.writeFile(
-          `${Date.now()}.${src.type.split("/")[1]}`,
-          await src.arrayBuffer()
-        );
-      }
-
-      const output = `enjoy://library/cache/${src.split("/").pop()}.wav`;
-      await EnjoyApp.ffmpeg.transcode(src, output, options);
-      const data = await fetchFile(output);
-      return new Blob([data], { type: "audio/wav" });
-    } else {
-      return transcodeUsingWasm(src, options);
+  const transcode = async (src: string | Blob): Promise<string> => {
+    if (src instanceof Blob) {
+      src = await EnjoyApp.cacheObjects.writeFile(
+        `${Date.now()}.${src.type.split("/")[1].split(";")[0]}`,
+        await src.arrayBuffer()
+      );
     }
-  };
 
-  const transcodeUsingWasm = async (src: string | Blob, options?: string[]) => {
-    if (!ffmpegWasm?.loaded) return;
-
-    options = options || ["-ar", "16000", "-ac", "1", "-c:a", "pcm_s16le"];
-
-    try {
-      let uri: URL;
-      if (src instanceof Blob) {
-        uri = new URL(URL.createObjectURL(src));
-      } else {
-        uri = new URL(src);
-      }
-
-      const input = uri.pathname.split("/").pop();
-      let output: string;
-      if (src instanceof Blob) {
-        output = input + ".wav";
-      } else {
-        output = input.replace(/\.[^/.]+$/, ".wav");
-      }
-      await ffmpegWasm.writeFile(input, await fetchFile(src));
-      await ffmpegWasm.exec(["-i", input, ...options, output]);
-      const data = await ffmpegWasm.readFile(output);
-      return new Blob([data], { type: "audio/wav" });
-    } catch (e) {
-      toast.error(t("transcodeError"));
-    }
+    const output = await EnjoyApp.echogarden.transcode(src);
+    return output;
   };
 
   const transcribe = async (
-    mediaSrc: string
+    mediaSrc: string,
+    params?: {
+      targetId?: string;
+      targetType?: string;
+      originalText?: string;
+      language?: string;
+    }
   ): Promise<{
     engine: string;
     model: string;
-    result: TranscriptionResultSegmentGroupType[];
+    alignmentResult: AlignmentResult;
+    originalText?: string;
   }> => {
-    const blob = await transcode(mediaSrc);
+    const url = await transcode(mediaSrc);
+    const {
+      targetId,
+      targetType,
+      originalText,
+      language = learningLanguage.split("-")[0],
+    } = params || {};
+    const blob = await (await fetch(url)).blob();
 
-    if (whisperConfig.service === "local") {
-      return transcribeByLocal(blob);
+    let result;
+    if (originalText) {
+      result = {
+        engine: "original",
+        model: "original",
+      };
+    } else if (whisperConfig.service === "local") {
+      result = await transcribeByLocal(url);
     } else if (whisperConfig.service === "cloudflare") {
-      return transcribeByCloudflareAi(blob);
+      result = await transcribeByCloudflareAi(blob);
     } else if (whisperConfig.service === "openai") {
-      return transcribeByOpenAi(blob);
+      result = await transcribeByOpenAi(blob);
     } else if (whisperConfig.service === "azure") {
-      return transcribeByAzureAi(blob);
+      result = await transcribeByAzureAi(blob, { targetId, targetType });
     } else {
       throw new Error(t("whisperServiceNotSupported"));
     }
+
+    let transcript = originalText || result.text;
+    // if the transcript does not contain any punctuation, use AI command to add punctuation
+    if (!transcript.match(/\w[.,!?](\s|$)/)) {
+      try {
+        transcript = await punctuateText(transcript);
+      } catch (err) {
+        console.warn(err.message);
+      }
+    }
+
+    const alignmentResult = await EnjoyApp.echogarden.align(
+      new Uint8Array(await blob.arrayBuffer()),
+      transcript,
+      {
+        language,
+      }
+    );
+
+    return {
+      ...result,
+      originalText,
+      alignmentResult,
+    };
   };
 
-  const transcribeByLocal = async (blob: Blob) => {
+  const transcribeByLocal = async (url: string) => {
     const res = await EnjoyApp.whisper.transcribe(
       {
-        blob: {
-          type: blob.type.split(";")[0],
-          arrayBuffer: await blob.arrayBuffer(),
-        },
+        file: url,
       },
       {
         force: true,
@@ -107,12 +107,10 @@ export const useTranscribe = () => {
       }
     );
 
-    const result = groupTranscription(res.transcription);
-
     return {
       engine: "whisper",
       model: res.model.type,
-      result,
+      text: res.transcription.map((segment) => segment.text).join(" "),
     };
   };
 
@@ -127,41 +125,16 @@ export const useTranscribe = () => {
       dangerouslyAllowBrowser: true,
     });
 
-    const res: {
-      words: {
-        word: string;
-        start: number;
-        end: number;
-      }[];
-    } = (await client.audio.transcriptions.create({
+    const res: { text: string } = (await client.audio.transcriptions.create({
       file: new File([blob], "audio.wav"),
       model: "whisper-1",
-      response_format: "verbose_json",
-      timestamp_granularities: ["word"],
+      response_format: "json",
     })) as any;
-
-    const transcription: TranscriptionResultSegmentType[] = res.words.map(
-      (word) => {
-        return {
-          offsets: {
-            from: word.start * 1000,
-            to: word.end * 1000,
-          },
-          timestamps: {
-            from: milisecondsToTimestamp(word.start * 1000),
-            to: milisecondsToTimestamp(word.end * 1000),
-          },
-          text: word.word,
-        };
-      }
-    );
-
-    const result = groupTranscription(transcription);
 
     return {
       engine: "openai",
       model: "whisper-1",
-      result,
+      text: res.text,
     };
   };
 
@@ -174,45 +147,32 @@ export const useTranscribe = () => {
         timeout: 1000 * 60 * 5,
       })
     ).data;
-    const transcription: TranscriptionResultSegmentType[] = res.words.map(
-      (word) => {
-        return {
-          offsets: {
-            from: word.start * 1000,
-            to: word.end * 1000,
-          },
-          timestamps: {
-            from: milisecondsToTimestamp(word.start * 1000),
-            to: milisecondsToTimestamp(word.end * 1000),
-          },
-          text: word.word,
-        };
-      }
-    );
-
-    const result = groupTranscription(transcription);
 
     return {
       engine: "cloudflare",
       model: "@cf/openai/whisper",
-      result,
+      text: res.text,
     };
   };
 
   const transcribeByAzureAi = async (
-    blob: Blob
+    blob: Blob,
+    params?: {
+      targetId?: string;
+      targetType?: string;
+    }
   ): Promise<{
     engine: string;
     model: string;
-    result: TranscriptionResultSegmentGroupType[];
+    text: string;
   }> => {
-    const { token, region } = await webApi.generateSpeechToken();
+    const { token, region } = await webApi.generateSpeechToken(params);
     const config = sdk.SpeechConfig.fromAuthorizationToken(token, region);
     const audioConfig = sdk.AudioConfig.fromWavFileInput(
       new File([blob], "audio.wav")
     );
-    // setting the recognition language to English.
-    config.speechRecognitionLanguage = "en-US";
+    // setting the recognition language to learning language, such as 'en-US'.
+    config.speechRecognitionLanguage = learningLanguage;
     config.requestWordLevelTimestamps();
     config.outputFormat = sdk.OutputFormat.Detailed;
 
@@ -245,43 +205,10 @@ export const useTranscribe = () => {
       reco.sessionStopped = (_s, _e) => {
         reco.stopContinuousRecognitionAsync();
 
-        const transcription: TranscriptionResultSegmentType[] = [];
-
-        results.forEach((result) => {
-          const best = take(sortedUniqBy(result.NBest, "Confidence"), 1)[0];
-          const words = best.Display.trim().split(" ");
-
-          best.Words.map((word, index) => {
-            let text = word.Word;
-            if (words.length === best.Words.length) {
-              text = words[index];
-            }
-
-            if (
-              index === best.Words.length - 1 &&
-              !text.trim().match(END_OF_WORD_REGEX)
-            ) {
-              text = text + ".";
-            }
-
-            transcription.push({
-              offsets: {
-                from: word.Offset / 1e4,
-                to: (word.Offset + word.Duration) / 1e4,
-              },
-              timestamps: {
-                from: milisecondsToTimestamp(word.Offset / 1e4),
-                to: milisecondsToTimestamp((word.Offset + word.Duration) * 1e4),
-              },
-              text,
-            });
-          });
-        });
-
         resolve({
           engine: "azure",
           model: "whisper",
-          result: groupTranscription(transcription),
+          text: results.map((result) => result.DisplayText).join(" "),
         });
       };
 

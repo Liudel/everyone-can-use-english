@@ -239,7 +239,7 @@ export const VideosComponent = () => {
             <AlertDialogTitle>{t("transcribe")}</AlertDialogTitle>
             <AlertDialogDescription>
               <p className="break-all">
-                {t("transcribeVideoConfirmation", {
+                {t("transcribeMediaConfirmation", {
                   name: transcribing?.name || "",
                 })}
               </p>
@@ -252,10 +252,9 @@ export const VideosComponent = () => {
               onClick={async () => {
                 if (!transcribing) return;
 
-                transcribe({
-                  mediaId: transcribing.id,
-                  mediaSrc: transcribing.src,
-                  mediaType: "Video",
+                transcribe(transcribing.src, {
+                  targetId: transcribing.id,
+                  targetType: "Video",
                 }).finally(() => {
                   setTranscribing(null);
                 });

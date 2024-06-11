@@ -2,10 +2,11 @@ type TranscriptionType = {
   id: string;
   targetId: string;
   targetType: string;
+  targetMd5?: string;
   state: "pending" | "processing" | "finished";
   engine: string;
   model: string;
-  result: TranscriptionResultSegmentGroupType[];
+  result: AlignmentResult & { original?: string };
 };
 
 type TranscriptionResultSegmentType = {

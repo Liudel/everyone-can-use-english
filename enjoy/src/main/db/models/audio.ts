@@ -28,6 +28,7 @@ import Ffmpeg from "@main/ffmpeg";
 import { Client } from "@/api";
 import startCase from "lodash/startCase";
 import { v5 as uuidv5 } from "uuid";
+import FfmpegWrapper from "@main/ffmpeg";
 
 const SIZE_LIMIT = 1024 * 1024 * 50; // 50MB
 
@@ -129,6 +130,16 @@ export class Audio extends Model<Audio> {
     return this.getDataValue("metadata").duration;
   }
 
+  @Column(DataType.VIRTUAL)
+  get mediaType(): string {
+    return "Audio";
+  }
+
+  @Column(DataType.VIRTUAL)
+  get filename(): string {
+    return this.getDataValue("md5") + this.extname;
+  }
+
   get extname(): string {
     return (
       this.getDataValue("metadata").extname ||
@@ -179,6 +190,23 @@ export class Audio extends Model<Audio> {
     });
   }
 
+  async crop(params: { startTime: number; endTime: number }) {
+    const { startTime, endTime } = params;
+
+    const ffmpeg = new FfmpegWrapper();
+    const output = path.join(
+      settings.cachePath(),
+      `${this.name}(${startTime.toFixed(2)}s-${endTime.toFixed(2)}).mp3`
+    );
+    await ffmpeg.crop(this.filePath, {
+      startTime,
+      endTime,
+      output,
+    });
+
+    return output;
+  }
+
   @BeforeCreate
   static async setupDefaultAttributes(audio: Audio) {
     try {
@@ -224,6 +252,12 @@ export class Audio extends Model<Audio> {
         targetType: "Audio",
       },
     });
+    Transcription.destroy({
+      where: {
+        targetId: audio.id,
+        targetType: "Audio",
+      },
+    });
 
     const webApi = new Client({
       baseUrl: process.env.WEB_API_URL || WEB_API_URL,
@@ -253,7 +287,7 @@ export class Audio extends Model<Audio> {
     }
 
     // Check if file format is supported
-    const extname = path.extname(filePath);
+    const extname = path.extname(filePath).toLocaleLowerCase();
     if (VideoFormats.includes(extname.split(".").pop() as string)) {
       return Video.buildFromLocalFile(filePath, params);
     } else if (!AudioFormats.includes(extname.split(".").pop() as string)) {

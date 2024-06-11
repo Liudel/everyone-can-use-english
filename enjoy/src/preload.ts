@@ -23,6 +23,9 @@ contextBridge.exposeInMainWorld("__ENJOY_APP__", {
     apiUrl: () => {
       return ipcRenderer.invoke("app-api-url");
     },
+    wsUrl: () => {
+      return ipcRenderer.invoke("app-ws-url");
+    },
     quit: () => {
       ipcRenderer.invoke("app-quit");
     },
@@ -33,6 +36,17 @@ contextBridge.exposeInMainWorld("__ENJOY_APP__", {
       return ipcRenderer.invoke("app-create-issue", title, body);
     },
     version,
+  },
+  window: {
+    onResize: (
+      callback: (
+        event: IpcRendererEvent,
+        bounds: { x: number; y: number; width: number; height: number }
+      ) => void
+    ) => ipcRenderer.on("window-on-resize", callback),
+    removeListeners: () => {
+      ipcRenderer.removeAllListeners("window-on-resize");
+    },
   },
   system: {
     preferences: {
@@ -73,6 +87,11 @@ contextBridge.exposeInMainWorld("__ENJOY_APP__", {
         return ipcRenderer.invoke("ted-provider-download-talk", url);
       },
     },
+    youtube: {
+      videos: (channel: string) => {
+        return ipcRenderer.invoke("youtube-provider-videos", channel);
+      },
+    },
   },
   view: {
     load: (
@@ -107,6 +126,23 @@ contextBridge.exposeInMainWorld("__ENJOY_APP__", {
   onNotification: (
     callback: (event: IpcRendererEvent, notification: NotificationType) => void
   ) => ipcRenderer.on("on-notification", callback),
+  onLookup: (
+    callback: (
+      event: IpcRendererEvent,
+      selection: string,
+      position: { x: number; y: number }
+    ) => void
+  ) => ipcRenderer.on("on-lookup", callback),
+  offLookup: () => {
+    ipcRenderer.removeAllListeners("on-lookup");
+  },
+  onTranslate: (
+    callback: (
+      event: IpcRendererEvent,
+      selection: string,
+      position: { x: number; y: number }
+    ) => void
+  ) => ipcRenderer.on("on-translate", callback),
   shell: {
     openExternal: (url: string) =>
       ipcRenderer.invoke("shell-open-external", url),
@@ -123,6 +159,12 @@ contextBridge.exposeInMainWorld("__ENJOY_APP__", {
       ipcRenderer.invoke("dialog-show-error-box", title, content),
   },
   settings: {
+    get: (key: string) => {
+      return ipcRenderer.invoke("settings-get", key);
+    },
+    set: (key: string, value: any) => {
+      return ipcRenderer.invoke("settings-set", key, value);
+    },
     getLibrary: () => {
       return ipcRenderer.invoke("settings-get-library");
     },
@@ -144,6 +186,12 @@ contextBridge.exposeInMainWorld("__ENJOY_APP__", {
     setDefaultEngine: (engine: "enjoyai" | "openai") => {
       return ipcRenderer.invoke("settings-set-default-engine", engine);
     },
+    getGptEngine: () => {
+      return ipcRenderer.invoke("settings-get-gpt-engine");
+    },
+    setGptEngine: (engine: GptEngineSettingType) => {
+      return ipcRenderer.invoke("settings-set-gpt-engine", engine);
+    },
     getLlm: (provider: string) => {
       return ipcRenderer.invoke("settings-get-llm", provider);
     },
@@ -155,6 +203,12 @@ contextBridge.exposeInMainWorld("__ENJOY_APP__", {
     },
     switchLanguage: (language: string) => {
       return ipcRenderer.invoke("settings-switch-language", language);
+    },
+    getDefaultHotkeys: () => {
+      return ipcRenderer.invoke("settings-get-default-hotkeys");
+    },
+    setDefaultHotkeys: (records: Record<string, string>) => {
+      return ipcRenderer.invoke("settings-set-default-hotkeys", records);
     },
   },
   path: {
@@ -176,6 +230,11 @@ contextBridge.exposeInMainWorld("__ENJOY_APP__", {
     ) => ipcRenderer.on("db-on-transaction", callback),
     removeListeners: () => {
       ipcRenderer.removeAllListeners("db-on-transaction");
+    },
+  },
+  camdict: {
+    lookup: (word: string) => {
+      return ipcRenderer.invoke("camdict-lookup", word);
     },
   },
   audios: {
@@ -200,6 +259,9 @@ contextBridge.exposeInMainWorld("__ENJOY_APP__", {
     upload: (id: string) => {
       return ipcRenderer.invoke("audios-upload", id);
     },
+    crop: (id: string, params: { startTime: number; endTime: number }) => {
+      return ipcRenderer.invoke("audios-crop", id, params);
+    },
   },
   videos: {
     findAll: (params: {
@@ -223,6 +285,9 @@ contextBridge.exposeInMainWorld("__ENJOY_APP__", {
     upload: (id: string) => {
       return ipcRenderer.invoke("videos-upload", id);
     },
+    crop: (id: string, params: { startTime: number; endTime: number }) => {
+      return ipcRenderer.invoke("videos-crop", id, params);
+    },
   },
   recordings: {
     findAll: (params?: {
@@ -235,6 +300,9 @@ contextBridge.exposeInMainWorld("__ENJOY_APP__", {
     },
     findOne: (params: any) => {
       return ipcRenderer.invoke("recordings-find-one", params);
+    },
+    sync: (id: string) => {
+      return ipcRenderer.invoke("recordings-sync", id);
     },
     syncAll: () => {
       return ipcRenderer.invoke("recordings-sync-all");
@@ -251,8 +319,8 @@ contextBridge.exposeInMainWorld("__ENJOY_APP__", {
     upload: (id: string) => {
       return ipcRenderer.invoke("recordings-upload", id);
     },
-    assess: (id: string) => {
-      return ipcRenderer.invoke("recordings-assess", id);
+    assess: (id: string, language?: string) => {
+      return ipcRenderer.invoke("recordings-assess", id, language);
     },
     stats: (params: { from: string; to: string }) => {
       return ipcRenderer.invoke("recordings-stats", params);
@@ -286,20 +354,6 @@ contextBridge.exposeInMainWorld("__ENJOY_APP__", {
     },
     destroy: (id: string) => {
       return ipcRenderer.invoke("conversations-destroy", id);
-    },
-    ask: (
-      id: string,
-      params: {
-        messageId?: string;
-        content?: string;
-        file?: string;
-        blob?: {
-          type: string;
-          arrayBuffer: ArrayBuffer;
-        };
-      }
-    ) => {
-      return ipcRenderer.invoke("conversations-ask", id, params);
     },
   },
   messages: {
@@ -350,6 +404,17 @@ contextBridge.exposeInMainWorld("__ENJOY_APP__", {
       return ipcRenderer.invoke("audiowaveform-frequencies", file);
     },
   },
+  echogarden: {
+    align: (input: string, transcript: string, options: any) => {
+      return ipcRenderer.invoke("echogarden-align", input, transcript, options);
+    },
+    transcode: (input: string) => {
+      return ipcRenderer.invoke("echogarden-transcode", input);
+    },
+    check: () => {
+      return ipcRenderer.invoke("echogarden-check");
+    },
+  },
   whisper: {
     config: () => {
       return ipcRenderer.invoke("whisper-config");
@@ -398,7 +463,7 @@ contextBridge.exposeInMainWorld("__ENJOY_APP__", {
       callback: (event: IpcRendererEvent, state: DownloadStateType) => void
     ) => ipcRenderer.on("download-on-state", callback),
     start: (url: string, savePath?: string) => {
-      ipcRenderer.invoke("download-start", url, savePath);
+      return ipcRenderer.invoke("download-start", url, savePath);
     },
     cancel: (filename: string) => {
       ipcRenderer.invoke("download-cancel", filename);
@@ -444,6 +509,53 @@ contextBridge.exposeInMainWorld("__ENJOY_APP__", {
     },
     save: (id: string, data: WaveFormDataType) => {
       return ipcRenderer.invoke("waveforms-save", id, data);
+    },
+  },
+  segments: {
+    findAll: (params: {
+      targetId?: string;
+      targetType?: string;
+      offset?: number;
+      limit?: number;
+    }) => {
+      return ipcRenderer.invoke("segments-find-all", params);
+    },
+    find: (id: string) => {
+      return ipcRenderer.invoke("segments-find", id);
+    },
+    create: (params: any) => {
+      return ipcRenderer.invoke("segments-create", params);
+    },
+    sync: (id: string) => {
+      return ipcRenderer.invoke("segments-sync", id);
+    },
+  },
+  notes: {
+    groupByTarget: (params?: { limit?: number; offset?: number }) => {
+      return ipcRenderer.invoke("notes-group-by-target", params);
+    },
+    groupBySegment: (targetId: string, targetType: string) => {
+      return ipcRenderer.invoke("notes-group-by-segment", targetId, targetType);
+    },
+    findAll: (params: {
+      targetId?: string;
+      targetType?: string;
+      offset?: number;
+      limit?: number;
+    }) => {
+      return ipcRenderer.invoke("notes-find-all", params);
+    },
+    update: (id: string, params: any) => {
+      return ipcRenderer.invoke("notes-update", id, params);
+    },
+    delete: (id: string) => {
+      return ipcRenderer.invoke("notes-delete", id);
+    },
+    create: (params: any) => {
+      return ipcRenderer.invoke("notes-create", params);
+    },
+    sync: (id: string) => {
+      return ipcRenderer.invoke("notes-sync", id);
     },
   },
 });

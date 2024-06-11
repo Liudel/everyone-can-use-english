@@ -19,6 +19,7 @@ type DownloadStateType = {
   state: "progressing" | "interrupted" | "completed" | "cancelled";
   received: number;
   total: number;
+  speed?: string;
 };
 
 type NotificationType = {
@@ -152,4 +153,24 @@ type TedIdeaType = {
 type ProxyConfigType = {
   enabled: boolean;
   url: string;
+};
+
+type YoutubeVideoType = {
+  title: string;
+  thumbnail: string;
+  videoId: string;
+  duration: string;
+};
+
+type GptEngineSettingType = {
+  name: string;
+  models: {
+    default: string;
+    lookup?: string;
+    translate?: string;
+    analyze?: string;
+    extractStory?: string;
+  };
+  baseUrl?: string;
+  key?: string;
 };

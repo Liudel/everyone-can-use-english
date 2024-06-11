@@ -1,11 +1,80 @@
 import { app, BrowserWindow, protocol, net } from "electron";
 import path from "path";
+import fs from "fs-extra";
 import settings from "@main/settings";
 import "@main/i18n";
+import log from "@main/logger";
 import mainWindow from "@main/window";
 import ElectronSquirrelStartup from "electron-squirrel-startup";
+import contextMenu from "electron-context-menu";
+import { t } from "i18next";
+import * as Sentry from "@sentry/electron/main";
+import { SENTRY_DSN } from "@/constants";
+import { updateElectronApp, UpdateSourceType } from "update-electron-app";
+
+const logger = log.scope("main");
+
+Sentry.init({
+  dsn: SENTRY_DSN,
+});
 
 app.commandLine.appendSwitch("enable-features", "SharedArrayBuffer");
+
+// config auto updater
+if (!process.env.CI) {
+  updateElectronApp({
+    updateSource: {
+      type: UpdateSourceType.StaticStorage,
+      baseUrl: `https://dl.enjoy.bot/app/${process.platform}/${process.arch}`,
+    },
+    updateInterval: "1 hour",
+    logger: logger,
+    notifyUser: true,
+  });
+}
+
+// Add context menu
+contextMenu({
+  showSearchWithGoogle: false,
+  showInspectElement: false,
+  showLookUpSelection: false,
+  showLearnSpelling: false,
+  showSelectAll: false,
+  labels: {
+    copy: t("copy"),
+    cut: t("cut"),
+    paste: t("paste"),
+    selectAll: t("selectAll"),
+  },
+  shouldShowMenu: (_event, params) => {
+    return params.isEditable || !!params.selectionText;
+  },
+  prepend: (
+    _defaultActions,
+    parameters,
+    browserWindow: BrowserWindow,
+    _event
+  ) => [
+    {
+      label: t("lookup"),
+      visible:
+        parameters.selectionText.trim().length > 0 &&
+        !parameters.selectionText.trim().includes(" "),
+      click: () => {
+        const { x, y, selectionText } = parameters;
+        browserWindow.webContents.send("on-lookup", selectionText, { x, y });
+      },
+    },
+    {
+      label: t("aiTranslate"),
+      visible: parameters.selectionText.trim().length > 0,
+      click: () => {
+        const { x, y, selectionText } = parameters;
+        browserWindow.webContents.send("on-translate", selectionText, { x, y });
+      },
+    },
+  ],
+});
 
 // Handle creating/removing shortcuts on Windows when installing/uninstalling.
 if (ElectronSquirrelStartup) {
@@ -34,7 +103,7 @@ protocol.registerSchemesAsPrivileged([
 app.on("ready", async () => {
   protocol.handle("enjoy", (request) => {
     let url = request.url.replace("enjoy://", "");
-    if (url.match(/library\/(audios|videos|recordings|speeches)/g)) {
+    if (url.match(/library\/(audios|videos|recordings|speeches|segments)/g)) {
       url = url.replace("library/", "");
       url = path.join(settings.userDataPath(), url);
     } else if (url.startsWith("library")) {
@@ -63,5 +132,9 @@ app.on("activate", () => {
   }
 });
 
-// In this file you can include the rest of your app's specific main process
-// code. You can also put them in separate files and import them here.
+// Clean up cache folder before quit
+app.on("before-quit", () => {
+  try {
+    fs.emptyDirSync(settings.cachePath());
+  } catch (err) {}
+});

@@ -6,7 +6,7 @@
 
 无论我想要表达什么，只要我能用第一语言描述清楚，AI 就可以几乎在瞬间帮我用英语表达清楚，不受我的词汇量限制，不受我的语法知识限制。我要做的，不过是定义若干个帮我干活的机器人（GPT）…… 它们返回给我的，都是我提前要求好的，要**口语**就口语，要**纽约风格**就纽约风格，还能给多个选择：
 
-> **ChatGPT GPT (NY Speak Easy) Instruction:** 
+> **ChatGPT GPT (NY Speak Easy) Instruction:**
 >
 > > NY Speak Easy serves as an English spoken adviser, specializing in translating the user's words into everyday spoken English with a New York twist, focusing on common phrasal verbs and idioms. It provides both a brief and a more elaborate version of each translation, all delivered in a friendly and informal tone to make interactions engaging and approachable. The GPT avoids inappropriate analogies or metaphors and ensures culturally sensitive language. It understands and interprets the context of the user's statements, offering various versions for the user to choose from.
 
@@ -50,7 +50,7 @@
 >
 > > Your role is to be a language guru, specializing in providing analogies. When a user provides words, phrases, or passages, you'll search your extensive knowledge base to offer several fitting analogies to enhance their expression. It's important to focus on relevance and creativity in your analogies to ensure they truly enrich the user's language. Avoid providing generic or unrelated analogies. If a passage is unclear or too broad, ask for clarification to ensure the analogies are as fitting as possible.
 
-这些 GPT 的 *Prompts* 一点都不高级，一点都不复杂，反过来，恰恰是因为给它们指定的任务是简单且又单一的，所以它们才总是可以做得很好 —— 每个返回结果我都很满意…… 
+这些 GPT 的 *Prompts* 一点都不高级，一点都不复杂，反过来，恰恰是因为给它们指定的任务是简单且又单一的，所以它们才总是可以做得很好 —— 每个返回结果我都很满意……
 
 突然之间，我们的**英文表达能力**只取决于我的**文字审美能力**了。只要我们知道什么样的文字是好的，在人工智能的帮助下，我们就能用那样好的方式去表达 —— 不操心**语言风格**，不用顾虑**文化冲突**，想要各种辅助可以信手拈来…… 甚至它还可以帮我们搜索研究资料，起码帮我们提供更多的线索…… **眼高手低**的尴尬突然之间消失掉了，无影无踪。
 
@@ -87,7 +87,7 @@
 
 人工智能的出现，再一次会极大提高多语使用者的数量，并且数量的增加，很可能不止一倍两倍，而是一个或者数个量级的变化。
 
-二十年多前，我曾经慨叹，在教学领域，因为互联网的存在，“**每个领域只要有一个老师就够了**” —— 我们只需要一个最好的老师，剩下的，都改行吧，干点别的，这样才能更好地贡献社会，这样才有助于提高社会整体效率。
+二十多年前，我曾经慨叹，在教学领域，因为互联网的存在，“**每个领域只要有一个老师就够了**” —— 我们只需要一个最好的老师，剩下的，都改行吧，干点别的，这样才能更好地贡献社会，这样才有助于提高社会整体效率。
 
 五年过去、十年过去、廿年过去，我的预言并未成真…… 为什么呢？其实问题并不在于互联网是否足够发达，反思一下，结论是，“谁都没办法证明自己是最好的老师”；与此同时，“谁都没办法分辨到底谁是最好的老师”……
 
@@ -99,7 +99,7 @@
 
 首先，有人跟你对话本身并无太大作用。否则的话，怎么会出现那种格外常见的情况？很多人在国外生活多年，但无论是最基础的语音塑造还是高级一点的语言使用能力全都毫无进步呢？找个外国人谈恋爱更扯淡，因为男女之间，真需要说的话实际上并不多，亲密到一定程度，更多剩下的只不过是全球通用的肢体语言。
 
-没有环境，在过去看起来可能是天大的困境，可在有人工智能辅助的今天，再也不可能是什么问题。如果真想对话，人工智能能陪你聊任何话题，直至任何深度，从科学技术，到历史文化，无论什么都与时俱进 —— 没有那个人可以做得比它更好。
+没有环境，在过去看起来可能是天大的困境，可在有人工智能辅助的今天，再也不可能是什么问题。如果真想对话，人工智能能陪你聊任何话题，直至任何深度，从科学技术，到历史文化，无论什么都与时俱进 —— 没有哪个人可以做得比它更好。
 
 其实，你每天说的所有的话，99% 以上都来自于你的记忆，你曾经见过的、曾经想过的、曾经说过写过的，即便有 1% 的即兴发挥，也全都建立在那 99% 的记忆之上。并且，我们在日常相互聊天的过程中，无论多么深入，我们所说的话，其实都**仅仅是我自己知道的**，**我自己思考过的内容**，而不是无所不知、无所不晓、无所不聊…… 这就好像我在讲台上讲课一样，我需要做到的是**在台上的一两个小时里绝对不出错**，而不是我什么都知道我什么都会 —— 我又不是什么百科全书、搜索引擎、抑或人工智能……
 
@@ -111,7 +111,6 @@
 
 举个例子，一个以 “星巴克” 为场景的对话，若是追求完整的话，感觉上我们所需要学的东西实在是太多了 —— 很奇怪的是，我们在咖啡馆里几乎从来不说 *coffee* 这个词 —— 拿铁、美式咖啡、焦糖玛奇朵、卡布奇诺、脱脂牛奶，低因，糖浆，榛果味糖浆，到底要几泵糖浆…… 可是，对我来说，永远是 *latte*，*hot*，*medium*，然后呢？然后就没了，真的没了。人家看我自己一个人，又不是外卖的装扮，通常也不会问几杯；如果人家竟然真的问了，我可能并不需要说话，只需要伸出一个手指头就行了……
 
-这就是为什么天下没有什么口语书的确适合你的根本原因 —— 每个人都太不一样了，每个人的感受不同，想法不同，经历不一样，表达方式不一样，哪儿哪儿都不一样，否则，为什么要交流呢？结果呢？教科书里十句里只有一句我自己用的上的，我想说的十句里有九句教科书里没有…… 这能有效吗？我们必须想办法定制属于我们自己的**个性化口语书**…… 
+这就是为什么天下没有什么口语书的确适合你的根本原因 —— 每个人都太不一样了，每个人的感受不同，想法不同，经历不一样，表达方式不一样，哪儿哪儿都不一样，否则，为什么要交流呢？结果呢？教科书里十句里只有一句我自己用的上的，我想说的十句里有九句教科书里没有…… 这能有效吗？我们必须想办法定制属于我们自己的**个性化口语书**……
 
 有了人工智能的辅助，那原本的不可能突然变成了轻而易举。你需要做的就是每天把自己想要说的话写下来，交给人工智能转换成英文，再转换成语音，然后在跟读、熟读、背诵…… 这就是我们的训练任务。只要攒得足够，无论遇到什么情况都能下意识处理 —— 其实，只要强度足够，一年就可以攒到远超大多数人的地步。
-

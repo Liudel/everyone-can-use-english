@@ -2,11 +2,11 @@ import { t } from "i18next";
 import { Button, ScrollArea, Separator } from "@renderer/components/ui";
 import {
   About,
+  Appearance,
   DefaultEngineSettings,
   Hotkeys,
   UserSettings,
   BalanceSettings,
-  LanguageSettings,
   LibrarySettings,
   WhisperSettings,
   OpenaiSettings,
@@ -14,9 +14,12 @@ import {
   GoogleGenerativeAiSettings,
   ResetSettings,
   ResetAllSettings,
+  NativeLanguageSettings,
+  LearningLanguageSettings,
 } from "@renderer/components";
 import { useState } from "react";
 import { Tooltip } from "react-tooltip";
+import { EmailSettings } from "./email-settings";
 
 export const Preferences = () => {
   const TABS = [
@@ -28,7 +31,9 @@ export const Preferences = () => {
           <div className="font-semibold mb-4 capitilized">
             {t("basicSettings")}
           </div>
-          <LibrarySettings />
+          <NativeLanguageSettings />
+          <Separator />
+          <LearningLanguageSettings />
           <Separator />
           <WhisperSettings />
           <Separator />
@@ -68,9 +73,11 @@ export const Preferences = () => {
           </div>
           <UserSettings />
           <Separator />
-          <BalanceSettings />
+          <LibrarySettings />
           <Separator />
-          <LanguageSettings />
+          <EmailSettings />
+          <Separator />
+          <BalanceSettings />
           <Separator />
         </div>
       ),
@@ -79,6 +86,11 @@ export const Preferences = () => {
       value: "hotkeys",
       label: t("hotkeys"),
       component: () => <Hotkeys />,
+    },
+    {
+      value: "appearance",
+      label: t("appearance"),
+      component: () => <Appearance />,
     },
     {
       value: "about",

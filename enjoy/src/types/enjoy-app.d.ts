@@ -6,10 +6,15 @@ type EnjoyAppType = {
     reload: () => Promise<void>;
     isPackaged: () => Promise<boolean>;
     apiUrl: () => Promise<string>;
+    wsUrl: () => Promise<string>;
     quit: () => Promise<void>;
     openDevTools: () => Promise<void>;
     createIssue: (title: string, body: string) => Promise<void>;
     version: string;
+  };
+  window: {
+    onResize: (callback: (event, bounds: any) => void) => void;
+    removeListeners: () => void;
   };
   system: {
     preferences: {
@@ -36,6 +41,9 @@ type EnjoyAppType = {
       talks: () => Promise<TedTalkType[]>;
       ideas: () => Promise<TedIdeaType[]>;
       downloadTalk: (url: string) => Promise<{ audio: string; video: string }>;
+    };
+    youtube: {
+      videos: (channel: string) => Promise<YoutubeVideoType[]>;
     };
   };
   view: {
@@ -66,6 +74,21 @@ type EnjoyAppType = {
   onNotification: (
     callback: (event, notification: NotificationType) => void
   ) => void;
+  onLookup: (
+    callback: (
+      event,
+      selection: string,
+      position: { x: number; y: number }
+    ) => void
+  ) => void;
+  offLookup: () => void;
+  onTranslate: (
+    callback: (
+      event,
+      selection: string,
+      position: { x: number; y: number }
+    ) => void
+  ) => void;
   shell: {
     openExternal: (url: string) => Promise<void>;
     openPath: (path: string) => Promise<void>;
@@ -76,20 +99,24 @@ type EnjoyAppType = {
     ) => Promise<string[] | undefined>;
     showSaveDialog: (
       options: Electron.SaveDialogOptions
-    ) => Promise<Electron.SaveDialogReturnValue>;
+    ) => Promise<string | undefined>;
     showMessageBox: (
       options: Electron.MessageBoxOptions
     ) => Promise<Electron.MessageBoxReturnValue>;
     showErrorBox: (title: string, content: string) => Promise<void>;
   };
   settings: {
+    get: (key: string) => Promise<any>;
+    set: (key: string, value: any) => Promise<void>;
     getLibrary: () => Promise<string>;
     setLibrary: (library: string) => Promise<void>;
     getUser: () => Promise<UserType>;
     setUser: (user: UserType) => Promise<void>;
     getUserDataPath: () => Promise<string>;
     getDefaultEngine: () => Promise<string>;
-    setDefaultEngine: (engine: "enjoyai" | "openai") => Promise<void>;
+    setDefaultEngine: (string) => Promise<string>;
+    getGptEngine: () => Promise<GptEngineSettingType>;
+    setGptEngine: (GptEngineSettingType) => Promise<GptEngineSettingType>;
     getLlm: (provider: SupportedLlmProviderType) => Promise<LlmProviderType>;
     setLlm: (
       provider: SupportedLlmProviderType,
@@ -97,6 +124,8 @@ type EnjoyAppType = {
     ) => Promise<void>;
     getLanguage: () => Promise<string>;
     switchLanguage: (language: string) => Promise<void>;
+    getDefaultHotkeys: () => Promise<Record<string, string> | undefined>;
+    setDefaultHotkeys: (records: Record<string, string>) => Promise<void>;
   };
   fs: {
     ensureDir: (path: string) => Promise<boolean>;
@@ -111,6 +140,9 @@ type EnjoyAppType = {
     ) => Promise<void>;
     removeListeners: () => Promise<void>;
   };
+  camdict: {
+    lookup: (word: string) => Promise<CamdictWordType | null>;
+  };
   audios: {
     findAll: (params: any) => Promise<AudioType[]>;
     findOne: (params: any) => Promise<AudioType>;
@@ -118,6 +150,10 @@ type EnjoyAppType = {
     update: (id: string, params: any) => Promise<AudioType | undefined>;
     destroy: (id: string) => Promise<undefined>;
     upload: (id: string) => Promise<void>;
+    crop: (
+      id: string,
+      params: { startTime: number; endTime: number }
+    ) => Promise<string>;
   };
   videos: {
     findAll: (params: any) => Promise<VideoType[]>;
@@ -126,16 +162,21 @@ type EnjoyAppType = {
     update: (id: string, params: any) => Promise<VideoType | undefined>;
     destroy: (id: string) => Promise<undefined>;
     upload: (id: string) => Promise<void>;
+    crop: (
+      id: string,
+      params: { startTime: number; endTime: number }
+    ) => Promise<string>;
   };
   recordings: {
     findAll: (where: any) => Promise<RecordingType[]>;
     findOne: (where: any) => Promise<RecordingType>;
+    sync: (id: string) => Promise<void>;
     syncAll: () => Promise<void>;
     create: (params: any) => Promise<RecordingType>;
     update: (id: string, params: any) => Promise<RecordingType | undefined>;
     destroy: (id: string) => Promise<void>;
     upload: (id: string) => Promise<void>;
-    assess: (id: string) => Promise<void>;
+    assess: (id: string, language?: string) => Promise<void>;
     stats: (params: { from: string; to: string }) => Promise<{
       count: number;
       duration: number;
@@ -168,18 +209,6 @@ type EnjoyAppType = {
     create: (params: any) => Promise<ConversationType>;
     update: (id: string, params: any) => Promise<ConversationType>;
     destroy: (id: string) => Promise<void>;
-    ask: (
-      id: string,
-      params: {
-        messageId?: string;
-        content?: string;
-        file?: string;
-        blob?: {
-          type: string;
-          arrayBuffer: ArrayBuffer;
-        };
-      }
-    ) => Promise<MessageType[]>;
   };
   messages: {
     findAll: (params: any) => Promise<MessageType[]>;
@@ -205,6 +234,15 @@ type EnjoyAppType = {
         arrayBuffer: ArrayBuffer;
       }
     ) => Promise<SpeechType>;
+  };
+  echogarden: {
+    align: (
+      input: string | Uint8Array,
+      transcript: string,
+      options?: any
+    ) => Promise<AlignmentResult>;
+    transcode: (input: string) => Promise<string>;
+    check: () => Promise<boolean>;
   };
   whisper: {
     config: () => Promise<WhisperConfigType>;
@@ -236,7 +274,7 @@ type EnjoyAppType = {
   };
   download: {
     onState: (callback: (event, state) => void) => void;
-    start: (url: string, savePath?: string) => void;
+    start: (url: string, savePath?: string) => Promise<string | undefined>;
     cancel: (filename: string) => Promise<void>;
     cancelAll: () => void;
     dashboard: () => Promise<DownloadStateType[]>;
@@ -256,5 +294,36 @@ type EnjoyAppType = {
   waveforms: {
     find: (id: string) => Promise<WaveFormDataType>;
     save: (id: string, data: WaveFormDataType) => Promise<void>;
+  };
+  segments: {
+    findAll: (params: any) => Promise<SegmentType[]>;
+    find: (id: string) => Promise<SegmentType>;
+    create: (params: {
+      targetId: string;
+      targetType: string;
+      segmentIndex: number;
+    }) => Promise<SegmentType>;
+    sync: (id: string) => Promise<SegmentType>;
+  };
+  notes: {
+    groupByTarget: (params: any) => Promise<any>;
+    groupBySegment: (targetId: string, targetType: string) => Promise<any>;
+    findAll: (params: any) => Promise<NoteType[]>;
+    find: (id: string) => Promise<NoteType>;
+    update: (
+      id: string,
+      params: {
+        content: string;
+        parameters?: any;
+      }
+    ) => Promise<NoteType>;
+    delete: (id: string) => Promise<void>;
+    create: (params: {
+      targetId: string;
+      targetType: string;
+      content: string;
+      parameters?: any;
+    }) => Promise<NoteType>;
+    sync: (id: string) => Promise<NoteType>;
   };
 };

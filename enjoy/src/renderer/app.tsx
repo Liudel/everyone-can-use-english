@@ -3,12 +3,13 @@ import {
   AISettingsProvider,
   AppSettingsProvider,
   DbProvider,
+  HotKeysSettingsProvider,
 } from "@renderer/context";
 import router from "./router";
 import { RouterProvider } from "react-router-dom";
 import { Toaster, toast } from "@renderer/components/ui";
 import { Tooltip } from "react-tooltip";
-import { useHotkeys } from "react-hotkeys-hook";
+import { LookupWidget, TranslateWidget } from "./components";
 
 function App() {
   window.__ENJOY_APP__.onNotification((_event, notification) => {
@@ -31,32 +32,20 @@ function App() {
     }
   });
 
-  const ControlOrCommand = navigator.platform.includes("Mac")
-    ? "Meta"
-    : "Control";
-
-  useHotkeys(`${ControlOrCommand}+Comma`, () => {
-    document.getElementById("preferences-button")?.click();
-  });
-
-  useHotkeys(`${ControlOrCommand}+Q`, () => {
-    window.__ENJOY_APP__.app.quit();
-  });
-
-  useHotkeys(`${ControlOrCommand}+Shift+I`, () => {
-    window.__ENJOY_APP__.app.openDevTools();
-  });
-
   return (
-    <ThemeProvider defaultTheme="light" storageKey="vite-ui-theme">
+    <ThemeProvider defaultTheme="system" storageKey="vite-ui-theme">
       <AppSettingsProvider>
-        <AISettingsProvider>
-          <DbProvider>
-            <RouterProvider router={router} />
-            <Toaster richColors position="top-center" />
-            <Tooltip id="global-tooltip" />
-          </DbProvider>
-        </AISettingsProvider>
+        <HotKeysSettingsProvider>
+          <AISettingsProvider>
+            <DbProvider>
+              <RouterProvider router={router} />
+              <Toaster richColors position="top-center" />
+              <Tooltip id="global-tooltip" />
+              <TranslateWidget />
+              <LookupWidget />
+            </DbProvider>
+          </AISettingsProvider>
+        </HotKeysSettingsProvider>
       </AppSettingsProvider>
     </ThemeProvider>
   );

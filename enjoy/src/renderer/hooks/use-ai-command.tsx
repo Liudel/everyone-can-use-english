@@ -7,12 +7,15 @@ import {
   lookupCommand,
   extractStoryCommand,
   translateCommand,
-  ipaCommand,
+  analyzeCommand,
+  punctuateCommand,
+  summarizeTopicCommand,
 } from "@commands";
-import { md5 } from "js-md5";
 
 export const useAiCommand = () => {
-  const { EnjoyApp, webApi } = useContext(AppSettingsProviderContext);
+  const { EnjoyApp, webApi, nativeLanguage, learningLanguage } = useContext(
+    AppSettingsProviderContext
+  );
   const { currentEngine } = useContext(AISettingsProviderContext);
 
   const lookupWord = async (params: {
@@ -20,97 +23,125 @@ export const useAiCommand = () => {
     context: string;
     sourceId?: string;
     sourceType?: string;
+    cacheKey?: string;
+    force?: boolean;
   }) => {
-    const { word, context, sourceId, sourceType } = params;
+    const { context, sourceId, sourceType, cacheKey, force = false } = params;
+    let { word } = params;
+    word = word.trim();
+    if (!word) return;
 
     const lookup = await webApi.lookup({
       word,
       context,
       sourceId,
       sourceType,
+      nativeLanguage,
     });
 
-    if (lookup.meaning) {
+    if (lookup.meaning && !force) {
       return lookup;
     }
+
+    const modelName =
+      currentEngine.models.lookup || currentEngine.models.default;
 
     const res = await lookupCommand(
       {
         word,
         context,
         meaningOptions: lookup.meaningOptions,
+        nativeLanguage,
+        learningLanguage,
       },
       {
         key: currentEngine.key,
-        modelName: currentEngine.model,
+        modelName,
         baseUrl: currentEngine.baseUrl,
       }
     );
 
-    if (res.context_translation?.trim()) {
-      return webApi.updateLookup(lookup.id, {
-        meaning: res,
-        sourceId,
-        sourceType,
-      });
+    webApi.updateLookup(lookup.id, {
+      meaning: res,
+      sourceId,
+      sourceType,
+    });
+
+    const result = Object.assign(lookup, {
+      meaning: res,
+    });
+
+    if (cacheKey) {
+      EnjoyApp.cacheObjects.set(cacheKey, result);
     }
+
+    return result;
   };
 
   const extractStory = async (story: StoryType) => {
-    return extractStoryCommand(story.content, {
+    const res = await extractStoryCommand(story.content, learningLanguage, {
       key: currentEngine.key,
-      modelName: currentEngine.model,
+      modelName:
+        currentEngine.models.extractStory || currentEngine.models.default,
       baseUrl: currentEngine.baseUrl,
-    }).then((res) => {
-      const { words = [], idioms = [] } = res;
+    });
+    const { words = [], idioms = [] } = res;
 
-      return webApi.extractVocabularyFromStory(story.id, {
-        words,
-        idioms,
-      });
+    return webApi.extractVocabularyFromStory(story.id, {
+      words,
+      idioms,
     });
   };
 
-  const translate = async (text: string): Promise<string> => {
-    const hash = md5.create();
-    hash.update(text);
-    const cacheKey = `translate-${hash.hex()}`;
-    const cached = await EnjoyApp.cacheObjects.get(cacheKey);
-    if (cached) return cached;
-
-    return translateCommand(text, {
+  const translate = async (
+    text: string,
+    cacheKey?: string
+  ): Promise<string> => {
+    return translateCommand(text, nativeLanguage, {
       key: currentEngine.key,
-      modelName: currentEngine.model,
+      modelName: currentEngine.models.translate || currentEngine.models.default,
       baseUrl: currentEngine.baseUrl,
     }).then((res) => {
-      EnjoyApp.cacheObjects.set(cacheKey, res);
+      if (cacheKey) {
+        EnjoyApp.cacheObjects.set(cacheKey, res);
+      }
       return res;
     });
   };
 
-  const pronounce = async (
-    text: string
-  ): Promise<
-    {
-      word?: string;
-      ipa?: string;
-    }[]
-  > => {
-    const hash = md5.create();
-    hash.update(text);
-    const cacheKey = `ipa-${hash.hex()}`;
-    const cached = await EnjoyApp.cacheObjects.get(cacheKey);
-    if (cached) return cached;
-
-    return ipaCommand(text, {
-      key: currentEngine.key,
-      modelName: currentEngine.model,
-      baseUrl: currentEngine.baseUrl,
-    }).then((result) => {
-      if (result?.words?.length > 0) {
-        EnjoyApp.cacheObjects.set(cacheKey, result.words);
+  const analyzeText = async (text: string, cacheKey?: string) => {
+    const res = await analyzeCommand(
+      text,
+      {
+        learningLanguage,
+        nativeLanguage,
+      },
+      {
+        key: currentEngine.key,
+        modelName: currentEngine.models.analyze || currentEngine.models.default,
+        baseUrl: currentEngine.baseUrl,
       }
-      return result.words;
+    );
+
+    if (cacheKey) {
+      EnjoyApp.cacheObjects.set(cacheKey, res);
+    }
+    return res;
+  };
+
+  const punctuateText = async (text: string) => {
+    return punctuateCommand(text, {
+      key: currentEngine.key,
+      modelName: currentEngine.models.default,
+      baseUrl: currentEngine.baseUrl,
+    });
+  };
+
+  const summarizeTopic = async (text: string) => {
+    return summarizeTopicCommand(text, learningLanguage, {
+      key: currentEngine.key,
+      modelName: currentEngine.models.default,
+      baseUrl: currentEngine.baseUrl,
     });
   };
 
@@ -118,6 +149,8 @@ export const useAiCommand = () => {
     lookupWord,
     extractStory,
     translate,
-    pronounce,
+    analyzeText,
+    punctuateText,
+    summarizeTopic,
   };
 };

@@ -21,12 +21,12 @@ export const RecordingDetail = (props: { recording: RecordingType }) => {
   }>();
   const [isPlaying, setIsPlaying] = useState(false);
 
-  const { EnjoyApp } = useContext(AppSettingsProviderContext);
+  const { EnjoyApp, learningLanguage } = useContext(AppSettingsProviderContext);
   const [assessing, setAssessing] = useState(false);
 
   const assess = () => {
     setAssessing(true);
-    EnjoyApp.recordings.assess(recording.id).finally(() => {
+    EnjoyApp.recordings.assess(recording.id, learningLanguage).finally(() => {
       setAssessing(false);
     });
   };
@@ -58,10 +58,12 @@ export const RecordingDetail = (props: { recording: RecordingType }) => {
           }}
         />
       ) : (
-        <ScrollArea className="h-72 py-4 px-8">
-          <p className="text-xl font-serif tracking-wide">
-            {recording?.segmentText}
-          </p>
+        <ScrollArea className="h-72 py-4 px-8 select-text">
+          {(recording?.referenceText || "").split("\n").map((line, index) => (
+            <div key={index} className="text-xl font-serif tracking-wide mb-2">
+              {line}
+            </div>
+          ))}
         </ScrollArea>
       )}
 

@@ -68,7 +68,7 @@ test("validate whisper command", async () => {
   expect(res.success).toBeTruthy();
 
   const settings = fs.readJsonSync(path.join(resultDir, "settings.json"));
-  expect(settings.whisper.service).toBe("local");
+  expect(settings.whisper.service).toBe("azure");
 });
 
 test("valid ffmpeg command", async () => {
@@ -76,6 +76,16 @@ test("valid ffmpeg command", async () => {
     return window.__ENJOY_APP__.ffmpeg.check();
   });
   expect(res).toBeTruthy();
+});
+
+test("validate echogarden align command", async () => {
+  const res = await page.evaluate(() => {
+    return window.__ENJOY_APP__.echogarden.check();
+  });
+  expect(res).toBeTruthy();
+
+  const settings = fs.readJsonSync(path.join(resultDir, "settings.json"));
+  expect(settings.whisper.service).toBe("azure");
 });
 
 test("should setup default library path", async () => {

@@ -1,7 +1,7 @@
 import {
   app,
   BrowserWindow,
-  BrowserView,
+  WebContentsView,
   Menu,
   ipcMain,
   shell,
@@ -16,11 +16,13 @@ import whisper from "@main/whisper";
 import fs from "fs-extra";
 import "@main/i18n";
 import log from "@main/logger";
-import { WEB_API_URL, REPO_URL } from "@/constants";
-import { AudibleProvider, TedProvider } from "@main/providers";
+import { WEB_API_URL, REPO_URL, WS_URL } from "@/constants";
+import { AudibleProvider, TedProvider, YoutubeProvider } from "@main/providers";
 import Ffmpeg from "@main/ffmpeg";
 import { Waveform } from "./waveform";
-import url from 'url';
+import url from "url";
+import echogarden from "./echogarden";
+import camdict from "./camdict";
 
 const __filename = url.fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -29,6 +31,7 @@ const logger = log.scope("window");
 
 const audibleProvider = new AudibleProvider();
 const tedProvider = new TedProvider();
+const youtubeProvider = new YoutubeProvider();
 const ffmpeg = new Ffmpeg();
 const waveform = new Waveform();
 
@@ -46,8 +49,13 @@ main.init = () => {
   // Prepare local database
   db.registerIpcHandlers();
 
+  camdict.registerIpcHandlers();
+
   // Prepare Settings
   settings.registerIpcHandlers();
+
+  // echogarden
+  echogarden.registerIpcHandlers();
 
   // Whisper
   whisper.registerIpcHandlers();
@@ -66,6 +74,9 @@ main.init = () => {
 
   // TedProvider
   tedProvider.registerIpcHandlers();
+
+  // YoutubeProvider
+  youtubeProvider.registerIpcHandlers();
 
   // proxy
   ipcMain.handle("system-proxy-get", (_event) => {
@@ -130,9 +141,8 @@ main.init = () => {
       const { navigatable = false } = options || {};
 
       logger.debug("view-load", url);
-      const view = new BrowserView();
-      view.setBackgroundColor("#fff");
-      mainWindow.setBrowserView(view);
+      const view = new WebContentsView();
+      mainWindow.contentView.addChildView(view);
 
       view.setBounds({
         x: Math.round(x),
@@ -140,12 +150,7 @@ main.init = () => {
         width: Math.round(width),
         height: Math.round(height),
       });
-      view.setAutoResize({
-        width: true,
-        height: true,
-        horizontal: true,
-        vertical: true,
-      });
+
       view.webContents.on("did-navigate", (_event, url) => {
         event.sender.send("view-on-state", {
           state: "did-navigate",
@@ -161,7 +166,7 @@ main.init = () => {
             url: validatedURL,
           });
           (view.webContents as any).destroy();
-          mainWindow.removeBrowserView(view);
+          mainWindow.contentView.removeChildView(view);
         }
       );
       view.webContents.on("did-finish-load", () => {
@@ -182,14 +187,6 @@ main.init = () => {
         });
 
         logger.debug("will-redirect", detail.url);
-        if (
-          detail.url.startsWith(
-            `${process.env.WEB_API_URL || WEB_API_URL}/oauth`
-          )
-        ) {
-          logger.debug("prevent redirect", detail.url);
-          detail.preventDefault();
-        }
       });
 
       view.webContents.on("will-navigate", (detail) => {
@@ -199,12 +196,7 @@ main.init = () => {
         });
 
         logger.debug("will-navigate", detail.url);
-        if (
-          !navigatable ||
-          detail.url.startsWith(
-            `${process.env.WEB_API_URL || WEB_API_URL}/oauth`
-          )
-        ) {
+        if (!navigatable) {
           logger.debug("prevent navigation", detail.url);
           detail.preventDefault();
         }
@@ -215,27 +207,17 @@ main.init = () => {
 
   ipcMain.handle("view-remove", () => {
     logger.debug("view-remove");
-    mainWindow.getBrowserViews().forEach((view) => {
-      (view.webContents as any).destroy();
-      mainWindow.removeBrowserView(view);
+    mainWindow.contentView.children.forEach((view) => {
+      mainWindow.contentView.removeChildView(view);
     });
   });
 
   ipcMain.handle("view-hide", () => {
     logger.debug("view-hide");
-    const view = mainWindow.getBrowserView();
+    const view = mainWindow.contentView.children[0];
     if (!view) return;
 
-    const bounds = view.getBounds();
-    logger.debug("current view bounds", bounds);
-    if (bounds.width === 0 && bounds.height === 0) return;
-
-    view.setBounds({
-      x: -Math.round(bounds.width),
-      y: -Math.round(bounds.height),
-      width: 0,
-      height: 0,
-    });
+    view.setVisible(false);
   });
 
   ipcMain.handle(
@@ -249,25 +231,19 @@ main.init = () => {
         height: number;
       }
     ) => {
-      const view = mainWindow.getBrowserView();
+      const view = mainWindow.contentView.children[0];
       if (!view) return;
-      if (!bounds) return;
 
       logger.debug("view-show", bounds);
-      const { x = 0, y = 0, width = 0, height = 0 } = bounds || {};
-      view.setBounds({
-        x: Math.round(x),
-        y: Math.round(y),
-        width: Math.round(width),
-        height: Math.round(height),
-      });
+      view.setVisible(true);
     }
   );
 
   ipcMain.handle("view-scrape", (event, url) => {
     logger.debug("view-scrape", url);
-    const view = new BrowserView();
-    mainWindow.setBrowserView(view);
+    const view = new WebContentsView();
+    view.setVisible(false);
+    mainWindow.contentView.addChildView(view);
 
     view.webContents.on("did-navigate", (_event, url) => {
       event.sender.send("view-on-state", {
@@ -284,7 +260,7 @@ main.init = () => {
           url: validatedURL,
         });
         (view.webContents as any).destroy();
-        mainWindow.removeBrowserView(view);
+        mainWindow.contentView.removeChildView(view);
       }
     );
     view.webContents.on("did-finish-load", () => {
@@ -296,7 +272,7 @@ main.init = () => {
             html,
           });
           (view.webContents as any).destroy();
-          mainWindow.removeBrowserView(view);
+          mainWindow.contentView.removeChildView(view);
         });
     });
 
@@ -340,6 +316,10 @@ main.init = () => {
 
   ipcMain.handle("app-api-url", () => {
     return process.env.WEB_API_URL || WEB_API_URL;
+  });
+
+  ipcMain.handle("app-ws-url", () => {
+    return process.env.WS_URL || WS_URL;
   });
 
   ipcMain.handle("app-quit", () => {
@@ -433,23 +413,22 @@ ${log}
   // Create the browser window.
   const mainWindow = new BrowserWindow({
     icon: "./assets/icon.png",
-    width: 1600,
-    height: 1200,
-    minWidth: 1024,
-    minHeight: 768,
+    width: 1280,
+    height: 720,
+    minWidth: 800,
+    minHeight: 600,
     webPreferences: {
       preload: path.join(__dirname, "preload.js"),
+      spellcheck: false,
     },
   });
 
-  mainWindow.webContents.setWindowOpenHandler(({ url }) => {
-    if (url.startsWith("http")) {
-      logger.info(`Opening ${url}`);
-      shell.openExternal(url);
-      return { action: "deny" };
-    } else {
-      return { action: "allow" };
-    }
+  mainWindow.on("resize", () => {
+    mainWindow.webContents.send("window-on-resize", mainWindow.getBounds());
+  });
+
+  mainWindow.webContents.setWindowOpenHandler(() => {
+    return { action: "allow" };
   });
 
   // and load the index.html of the app.

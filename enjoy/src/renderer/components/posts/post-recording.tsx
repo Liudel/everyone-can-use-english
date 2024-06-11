@@ -1,15 +1,21 @@
-import { useEffect, useState, useRef, useCallback } from "react";
-import { PitchContour } from "@renderer/components";
+import { useEffect, useState, useRef, useCallback, useContext } from "react";
+import { renderPitchContour } from "@renderer/lib/utils";
+import { extractFrequencies } from "@/utils";
 import WaveSurfer from "wavesurfer.js";
 import { Button, Skeleton } from "@renderer/components/ui";
 import { PlayIcon, PauseIcon } from "lucide-react";
 import { useIntersectionObserver } from "@uidotdev/usehooks";
 import { secondsToTimestamp } from "@renderer/lib/utils";
+import { t } from "i18next";
+import { XCircleIcon } from "lucide-react";
+import { AppSettingsProviderContext } from "@renderer/context";
+import { WavesurferPlayer } from "@renderer/components";
 
 export const PostRecording = (props: {
   recording: RecordingType;
   height?: number;
 }) => {
+  const { webApi } = useContext(AppSettingsProviderContext);
   const { recording, height = 80 } = props;
   const [initialized, setInitialized] = useState(false);
   const [isPlaying, setIsPlaying] = useState(false);
@@ -19,10 +25,28 @@ export const PostRecording = (props: {
     threshold: 1,
   });
   const [duration, setDuration] = useState<number>(0);
+  const [error, setError] = useState<string>(null);
+  const [segment, setSegment] = useState<SegmentType>(null);
 
   const onPlayClick = useCallback(() => {
     wavesurfer.isPlaying() ? wavesurfer.pause() : wavesurfer.play();
   }, [wavesurfer]);
+
+  const fetchSegment = async () => {
+    if (segment) return;
+
+    webApi
+      .mineSegments({
+        targetId: recording.targetId,
+        targetType: recording.targetType,
+        segmentIndex: recording.referenceId,
+      })
+      .then((res) => {
+        if (res.segments.length === 0) return;
+
+        setSegment(res.segments[0]);
+      });
+  };
 
   useEffect(() => {
     // use the intersection observer to only create the wavesurfer instance
@@ -30,6 +54,7 @@ export const PostRecording = (props: {
     if (!entry?.isIntersecting) return;
     if (!recording.src) return;
     if (wavesurfer) return;
+    if (error) return;
 
     const ws = WaveSurfer.create({
       container: containerRef.current,
@@ -47,7 +72,13 @@ export const PostRecording = (props: {
     });
 
     setWavesurfer(ws);
-  }, [recording.src, entry]);
+
+    fetchSegment();
+
+    return () => {
+      setWavesurfer(null);
+    };
+  }, [recording.src, entry, error]);
 
   useEffect(() => {
     if (!wavesurfer) return;
@@ -59,18 +90,32 @@ export const PostRecording = (props: {
       wavesurfer.on("pause", () => {
         setIsPlaying(false);
       }),
-      wavesurfer.on("decode", () => {
+      wavesurfer.on("ready", () => {
         setDuration(wavesurfer.getDuration());
         const peaks = wavesurfer.getDecodedData().getChannelData(0);
         const sampleRate = wavesurfer.options.sampleRate;
-        wavesurfer.renderer.getWrapper().appendChild(
-          PitchContour({
-            peaks,
-            sampleRate,
-            height,
-          })
-        );
+        const data = extractFrequencies({ peaks, sampleRate });
+        setTimeout(() => {
+          renderPitchContour({
+            wrapper: wavesurfer.getWrapper(),
+            canvasId: `pitch-contour-${recording.id}-canvas`,
+            labels: new Array(data.length).fill(""),
+            datasets: [
+              {
+                data,
+                cubicInterpolationMode: "monotone",
+                pointRadius: 1,
+                borderColor: "#fb6f92",
+                pointBorderColor: "#fb6f92",
+                pointBackgroundColor: "#ff8fab",
+              },
+            ],
+          });
+        }, 1000);
         setInitialized(true);
+      }),
+      wavesurfer.on("error", (err: Error) => {
+        setError(err.message);
       }),
     ];
 
@@ -79,6 +124,22 @@ export const PostRecording = (props: {
       wavesurfer?.destroy();
     };
   }, [wavesurfer]);
+
+  if (error) {
+    return (
+      <div className="w-full bg-sky-500/30 rounded-lg p-4 border">
+        <div className="flex items-center justify-center mb-2">
+          <XCircleIcon className="w-4 h-4 text-destructive" />
+        </div>
+        <div className="select-text break-all text-center text-sm text-muted-foreground mb-4">
+          {error}
+        </div>
+        <div className="flex items-center justify-center">
+          <Button onClick={() => setError(null)}>{t("retry")}</Button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="w-full">
@@ -119,15 +180,15 @@ export const PostRecording = (props: {
         ></div>
       </div>
 
-      {
-        recording.referenceText && (
-          <div className="mt-2 bg-muted px-4 py-2 rounded">
-            <div className="text-muted-foreground text-center font-serif">
-              {recording.referenceText}
-            </div>
+      {recording.referenceText && (
+        <div className="my-2 bg-muted px-4 py-2 rounded">
+          <div className="text-muted-foreground text-center font-serif select-text">
+            {recording.referenceText}
           </div>
-        )
-      }
+        </div>
+      )}
+
+      {segment?.src && <WavesurferPlayer id={segment.id} src={segment.src} />}
     </div>
   );
 };

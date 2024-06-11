@@ -5,14 +5,21 @@ import Ffmpeg from "fluent-ffmpeg";
 import log from "@main/logger";
 import path from "path";
 import fs from "fs-extra";
-import settings from "./settings";
-import url from 'url';
+import settings from "@main/settings";
+import url from "url";
+import { FFMPEG_CONVERT_WAV_OPTIONS } from "@/constants";
+import { enjoyUrlToPath, pathToEnjoyUrl } from "@main/utils";
 
+/*
+ * ffmpeg and ffprobe bin file will be in /app.asar.unpacked instead of /app.asar
+ * the /samples folder is also in /app.asar.unpacked
+ */
+Ffmpeg.setFfmpegPath(ffmpegPath.replace("app.asar", "app.asar.unpacked"));
+Ffmpeg.setFfprobePath(ffprobePath.replace("app.asar", "app.asar.unpacked"));
 const __filename = url.fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-
-Ffmpeg.setFfmpegPath(ffmpegPath);
-Ffmpeg.setFfprobePath(ffprobePath);
+const __dirname = path
+  .dirname(__filename)
+  .replace("app.asar", "app.asar.unpacked");
 
 const logger = log.scope("ffmpeg");
 export default class FfmpegWrapper {
@@ -183,30 +190,15 @@ export default class FfmpegWrapper {
     output?: string,
     options?: string[]
   ): Promise<string> {
-    if (input.match(/enjoy:\/\/library\/(audios|videos|recordings)/g)) {
-      input = path.join(
-        settings.userDataPath(),
-        input.replace("enjoy://library/", "")
-      );
-    } else if (input.startsWith("enjoy://library/")) {
-      input = path.join(
-        settings.libraryPath(),
-        input.replace("enjoy://library/", "")
-      );
-    }
+    input = enjoyUrlToPath(input);
 
     if (!output) {
       output = path.join(settings.cachePath(), `${path.basename(input)}.wav`);
+    } else {
+      output = enjoyUrlToPath(output);
     }
 
-    if (output.startsWith("enjoy://library/")) {
-      output = path.join(
-        settings.libraryPath(),
-        output.replace("enjoy://library/", "")
-      );
-    }
-
-    options = options || ["-ar", "16000", "-ac", "1", "-c:a", "pcm_s16le"];
+    options = options || FFMPEG_CONVERT_WAV_OPTIONS;
 
     const ffmpeg = Ffmpeg();
     return new Promise((resolve, reject) => {
@@ -228,12 +220,50 @@ export default class FfmpegWrapper {
           }
 
           if (fs.existsSync(output)) {
-            resolve(output);
+            resolve(pathToEnjoyUrl(output));
           } else {
             reject(new Error("FFmpeg command failed"));
           }
         })
         .on("error", (err: Error) => {
+          logger.error(err);
+          reject(err);
+        })
+        .save(output);
+    });
+  }
+
+  // Crop video or audio from start to end time to a mp3 file
+  // Save the file to the output path
+  crop(
+    input: string,
+    options: {
+      startTime: number;
+      endTime: number;
+      output: string;
+    }
+  ) {
+    const { startTime, endTime, output } = options;
+    const ffmpeg = Ffmpeg();
+
+    return new Promise((resolve, reject) => {
+      ffmpeg
+        .input(input)
+        .outputOptions(
+          "-ss",
+          startTime.toString(),
+          "-to",
+          endTime.toString()
+        )
+        .on("start", (commandLine) => {
+          logger.info("Spawned FFmpeg with command: " + commandLine);
+          fs.ensureDirSync(path.dirname(output));
+        })
+        .on("end", () => {
+          logger.info(`File ${output} created`);
+          resolve(output);
+        })
+        .on("error", (err) => {
           logger.error(err);
           reject(err);
         })

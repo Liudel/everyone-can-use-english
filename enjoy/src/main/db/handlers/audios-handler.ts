@@ -5,6 +5,7 @@ import downloader from "@main/downloader";
 import log from "@main/logger";
 import { t } from "i18next";
 import youtubedr from "@main/youtubedr";
+import { pathToEnjoyUrl } from "@/main/utils";
 
 const logger = log.scope("db/handlers/audios-handler");
 
@@ -72,6 +73,7 @@ class AudiosHandler {
     params: {
       name?: string;
       coverUrl?: string;
+      originalText?: string;
     } = {}
   ) {
     let file = uri;
@@ -95,19 +97,33 @@ class AudiosHandler {
       }
     }
 
-    return Audio.buildFromLocalFile(file, {
-      source,
-      ...params,
-    })
-      .then((audio) => {
-        return audio.toJSON();
-      })
-      .catch((err) => {
-        return event.sender.send("on-notification", {
-          type: "error",
-          message: t("models.audio.failedToAdd", { error: err.message }),
-        });
+    try {
+      const audio = await Audio.buildFromLocalFile(file, {
+        source,
+        name: params.name,
+        coverUrl: params.coverUrl,
       });
+
+      // create transcription if originalText is provided
+      const { originalText } = params;
+      if (originalText) {
+        await Transcription.create({
+          targetType: "Audio",
+          targetId: audio.id,
+          targetMd5: audio.md5,
+          result: {
+            originalText,
+          },
+        });
+      }
+
+      return audio.toJSON();
+    } catch (err) {
+      return event.sender.send("on-notification", {
+        type: "error",
+        message: t("models.audio.failedToAdd", { error: err.message }),
+      });
+    }
   }
 
   private async update(
@@ -172,6 +188,24 @@ class AudiosHandler {
       });
   }
 
+  private async crop(
+    _event: IpcMainEvent,
+    id: string,
+    params: { startTime: number; endTime: number }
+  ) {
+    const audio = await Audio.findOne({
+      where: { id },
+    });
+    if (!audio) {
+      throw new Error(t("models.audio.notFound"));
+    }
+
+    const { startTime, endTime } = params;
+    const output = await audio.crop({ startTime, endTime });
+
+    return pathToEnjoyUrl(output);
+  }
+
   register() {
     ipcMain.handle("audios-find-all", this.findAll);
     ipcMain.handle("audios-find-one", this.findOne);
@@ -179,6 +213,7 @@ class AudiosHandler {
     ipcMain.handle("audios-update", this.update);
     ipcMain.handle("audios-destroy", this.destroy);
     ipcMain.handle("audios-upload", this.upload);
+    ipcMain.handle("audios-crop", this.crop);
   }
 }
 

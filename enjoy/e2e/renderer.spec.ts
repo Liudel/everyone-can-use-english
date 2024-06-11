@@ -67,8 +67,17 @@ test.describe("with login", async () => {
       });
     });
 
+    page.route("**/api/stories", (route) => {
+      route.fulfill({
+        json: {
+          stories: [],
+          next: null,
+        },
+      });
+    });
+
     await page.evaluate(() => {
-      return window.__ENJOY_APP__.app.reload();
+      return (window as any).__ENJOY_APP__.app.reload();
     });
   });
 
@@ -84,7 +93,7 @@ test.describe("with login", async () => {
   });
 
   test.describe("with conversation", async () => {
-    test.beforeEach(async () => {
+    test.beforeAll(async () => {
       const file = fs.readFileSync(
         path.join(process.cwd(), "samples", "speech.mp3")
       );
@@ -113,9 +122,39 @@ test.describe("with login", async () => {
           },
         });
       });
+    });
 
+    /*
+     * steps:
+     * 1. create a tts conversation
+     * 2. submit a message to the conversation
+     * 3. the speech should auto create
+     */
+    test("tts conversation", async () => {
       // navigate to the conversations page
       await page.getByTestId("sidebar-conversations").click();
+
+      // trigger new conversation modal
+      await page.getByTestId("conversation-new-button").click();
+
+      // create a tts conversation
+      await page.click("[data-testid=conversation-preset-tts]");
+      await page.getByTestId("conversation-form").waitFor();
+      await page.click("[data-testid=conversation-form-submit]");
+
+      // wait for the conversation to be created
+      await page.getByTestId("conversation-page").waitFor();
+
+      // submit a message to the conversation
+      await page.getByTestId("conversation-page-input").fill("How are you?");
+      await page.getByTestId("conversation-page-submit").click();
+      await page.locator(".ai-message").waitFor();
+      const player = page
+        .locator(".ai-message")
+        .getByTestId("wavesurfer-container");
+      await player.waitFor();
+
+      expect(await player.isVisible()).toBeTruthy();
     });
 
     /*
@@ -127,6 +166,9 @@ test.describe("with login", async () => {
      * 5. audio waveform player should be visible and transcription should be generated
      */
     test("gpt conversation", async () => {
+      // navigate to the conversations page
+      await page.getByTestId("sidebar-conversations").click();
+
       // trigger new conversation modal
       await page.getByTestId("conversation-new-button").click();
 
@@ -152,48 +194,21 @@ test.describe("with login", async () => {
       const player = page
         .locator(".ai-message")
         .getByTestId("wavesurfer-container");
-      await player.waitFor();
+      await player.waitFor({ timeout: 60000 });
       expect(await player.isVisible()).toBeTruthy();
 
       // add to library
       await page.getByTestId("message-start-shadow").click();
-      await page.getByTestId("audio-detail").waitFor();
-      await page.getByTestId("media-player-container").waitFor();
-      await page.getByTestId("media-transcription").waitFor();
-      await page.getByTestId("media-transcription-result").waitFor();
+      await page.getByTestId("audio-player").waitFor();
+      await page
+        .getByTestId("media-player-container")
+        .waitFor({ timeout: 60000 });
+      await page
+        .getByTestId("media-transcription-result")
+        .waitFor({ timeout: 60000 });
       expect(
         await page.getByTestId("media-transcription-result").isVisible()
       ).toBeTruthy();
-    });
-
-    /*
-     * steps:
-     * 1. create a tts conversation
-     * 2. submit a message to the conversation
-     * 3. the speech should auto create
-     */
-    test("tts conversation", async () => {
-      // trigger new conversation modal
-      await page.getByTestId("conversation-new-button").click();
-
-      // create a tts conversation
-      await page.click("[data-testid=conversation-preset-tts]");
-      await page.getByTestId("conversation-form").waitFor();
-      await page.click("[data-testid=conversation-form-submit]");
-
-      // wait for the conversation to be created
-      await page.getByTestId("conversation-page").waitFor();
-
-      // submit a message to the conversation
-      await page.getByTestId("conversation-page-input").fill("How are you?");
-      await page.getByTestId("conversation-page-submit").click();
-      await page.locator(".ai-message").waitFor();
-      const player = page
-        .locator(".ai-message")
-        .getByTestId("wavesurfer-container");
-      await player.waitFor();
-
-      expect(await player.isVisible()).toBeTruthy();
     });
   });
 });

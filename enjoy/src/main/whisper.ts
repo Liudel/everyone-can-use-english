@@ -5,10 +5,16 @@ import { WHISPER_MODELS_OPTIONS, PROCESS_TIMEOUT } from "@/constants";
 import { exec, spawn } from "child_process";
 import fs from "fs-extra";
 import log from "@main/logger";
-import url from 'url';
+import url from "url";
+import { enjoyUrlToPath } from "./utils";
 
 const __filename = url.fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
+/*
+ * whipser bin file will be in /app.asar.unpacked instead of /app.asar
+ */
+const __dirname = path
+  .dirname(__filename)
+  .replace("app.asar", "app.asar.unpacked");
 
 const logger = log.scope("whisper");
 
@@ -77,12 +83,12 @@ class Whipser {
     }
 
     settings.setSync("whisper.model", model.name);
-    return model.savePath;
+    return model;
   }
 
   async check() {
     const model = this.currentModel();
-    logger.debug(`Checking whisper model: ${model}`);
+    logger.debug(`Checking whisper model: ${model.savePath}`);
 
     const sampleFile = path.join(__dirname, "samples", "jfk.wav");
     const tmpDir = settings.cachePath();
@@ -92,7 +98,7 @@ class Whipser {
       const commands = [
         `"${this.binMain}"`,
         `--file "${sampleFile}"`,
-        `--model "${model}"`,
+        `--model "${model.savePath}"`,
         "--output-json",
         `--output-file "${path.join(tmpDir, "jfk")}"`,
       ];
@@ -145,22 +151,22 @@ class Whipser {
 
     const { blob } = params;
     let { file } = params;
-    if (!file && !blob) {
-      throw new Error("No file or blob provided");
-    }
 
-    const model = this.currentModel();
-
-    if (blob) {
+    if (file) {
+      file = enjoyUrlToPath(file);
+    } else if (blob) {
       const format = blob.type.split("/")[1];
-
       if (format !== "wav") {
         throw new Error("Only wav format is supported");
       }
 
       file = path.join(settings.cachePath(), `${Date.now()}.${format}`);
       await fs.outputFile(file, Buffer.from(blob.arrayBuffer));
+    } else {
+      throw new Error("No file or blob provided");
     }
+
+    const model = this.currentModel();
 
     const { force = false, extra = [], onProgress } = options || {};
     const filename = path.basename(file, path.extname(file));
@@ -177,14 +183,13 @@ class Whipser {
       "--file",
       file,
       "--model",
-      model,
+      model.savePath,
       "--output-json",
       "--output-file",
       path.join(tmpDir, filename),
-      "-pp",
-      "--split-on-word",
-      "--max-len",
-      "1",
+      "--print-progress",
+      "--language",
+      model.name.includes("en") ? "en" : "auto",
       ...extra,
     ];
 

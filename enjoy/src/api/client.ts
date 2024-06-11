@@ -70,18 +70,50 @@ export class Client {
   }
 
   auth(params: {
-    provider: "mixin" | "github" | "bandu";
-    code: string;
+    provider: "mixin" | "github" | "bandu" | "email";
+    code?: string;
+    deviceCode?: string;
     phoneNumber?: string;
+    email?: string;
+    mixinId?: string;
   }): Promise<UserType> {
     return this.api.post("/api/sessions", decamelizeKeys(params));
+  }
+
+  config(key: string): Promise<any> {
+    return this.api.get(`/api/config/${key}`);
+  }
+
+  deviceCode(provider = "github"): Promise<{
+    deviceCode: string;
+    userCode: string;
+    verificationUri: string;
+    expiresIn: number;
+    interval: number;
+  }> {
+    return this.api.post("/api/sessions/device_code", { provider });
   }
 
   me(): Promise<UserType> {
     return this.api.get("/api/me");
   }
 
-  loginCode(params: { phoneNumber: string }): Promise<void> {
+  updateProfile(
+    id: string,
+    params: {
+      name?: string;
+      email?: string;
+      code?: string;
+    }
+  ): Promise<UserType> {
+    return this.api.put(`/api/users/${id}`, decamelizeKeys(params));
+  }
+
+  loginCode(params: {
+    phoneNumber?: string;
+    email?: string;
+    mixinId?: string;
+  }): Promise<void> {
     return this.api.post("/api/sessions/login_code", decamelizeKeys(params));
   }
 
@@ -92,7 +124,79 @@ export class Client {
     return this.api.get("/api/users/rankings", { params: { range } });
   }
 
-  posts(params?: { page?: number; items?: number }): Promise<
+  users(filter: "following" | "followers" = "followers"): Promise<
+    {
+      users: UserType[];
+    } & PagyResponseType
+  > {
+    return this.api.get("/api/users", { params: { filter } });
+  }
+
+  user(id: string): Promise<UserType> {
+    return this.api.get(`/api/users/${id}`);
+  }
+
+  userFollowing(
+    id: string,
+    options: { page: number }
+  ): Promise<
+    {
+      users: UserType[];
+    } & PagyResponseType
+  > {
+    return this.api.get(`/api/users/${id}/following`, {
+      params: decamelizeKeys(options),
+    });
+  }
+
+  userFollowers(
+    id: string,
+    options: { page: number }
+  ): Promise<
+    {
+      users: UserType[];
+    } & PagyResponseType
+  > {
+    return this.api.get(`/api/users/${id}/followers`, {
+      params: decamelizeKeys(options),
+    });
+  }
+
+  follow(id: string): Promise<
+    {
+      user: UserType;
+    } & {
+      following: boolean;
+    }
+  > {
+    return this.api.post(`/api/users/${id}/follow`);
+  }
+
+  unfollow(id: string): Promise<
+    {
+      user: UserType;
+    } & {
+      following: boolean;
+    }
+  > {
+    return this.api.post(`/api/users/${id}/unfollow`);
+  }
+
+  posts(params?: {
+    page?: number;
+    items?: number;
+    userId?: string;
+    type?:
+      | "all"
+      | "recording"
+      | "medium"
+      | "story"
+      | "prompt"
+      | "text"
+      | "gpt"
+      | "note";
+    by?: "following" | "all";
+  }): Promise<
     {
       posts: PostType[];
     } & PagyResponseType
@@ -156,6 +260,18 @@ export class Client {
     return this.api.post("/api/transcriptions", decamelizeKeys(transcription));
   }
 
+  syncSegment(segment: Partial<Omit<SegmentType, "audio" | "video">>) {
+    return this.api.post("/api/segments", decamelizeKeys(segment));
+  }
+
+  syncNote(note: Partial<Omit<NoteType, "segment">>) {
+    return this.api.post("/api/notes", decamelizeKeys(note));
+  }
+
+  deleteNote(id: string) {
+    return this.api.delete(`/api/notes/${id}`);
+  }
+
   syncRecording(recording: Partial<RecordingType>) {
     if (!recording) return;
 
@@ -166,8 +282,25 @@ export class Client {
     return this.api.delete(`/api/mine/recordings/${id}`);
   }
 
-  generateSpeechToken(): Promise<{ token: string; region: string }> {
-    return this.api.post("/api/speech/tokens");
+  generateSpeechToken(params?: {
+    purpose?: string;
+    targetType?: string;
+    targetId?: string;
+    input?: string;
+  }): Promise<{ id: number; token: string; region: string }> {
+    return this.api.post("/api/speech/tokens", decamelizeKeys(params || {}));
+  }
+
+  consumeSpeechToken(id: number) {
+    return this.api.put(`/api/speech/tokens/${id}`, {
+      state: "consumed",
+    });
+  }
+
+  revokeSpeechToken(id: number) {
+    return this.api.put(`/api/speech/tokens/${id}`, {
+      state: "revoked",
+    });
   }
 
   syncPronunciationAssessment(
@@ -190,6 +323,7 @@ export class Client {
     context: string;
     sourceId?: string;
     sourceType?: string;
+    nativeLanguage?: string;
   }): Promise<LookupType> {
     return this.api.post("/api/lookups", decamelizeKeys(params));
   }
@@ -296,5 +430,45 @@ export class Client {
 
   unstarStory(storyId: string): Promise<{ starred: boolean }> {
     return this.api.delete(`/api/mine/stories/${storyId}`);
+  }
+
+  createPayment(params: {
+    amount: number;
+    reconciledCurrency: string;
+    processor: string;
+    paymentType: string;
+  }): Promise<PaymentType> {
+    return this.api.post("/api/payments", decamelizeKeys(params));
+  }
+
+  payments(params?: {
+    paymentType?: string;
+    page?: number;
+    items?: number;
+  }): Promise<
+    {
+      payments: PaymentType[];
+    } & PagyResponseType
+  > {
+    return this.api.get("/api/payments", { params: decamelizeKeys(params) });
+  }
+
+  payment(id: string): Promise<PaymentType> {
+    return this.api.get(`/api/payments/${id}`);
+  }
+
+  mineSegments(params?: {
+    page?: number;
+    segmentIndex?: number;
+    targetId?: string;
+    targetType?: string;
+  }): Promise<
+    {
+      segments: SegmentType[];
+    } & PagyResponseType
+  > {
+    return this.api.get("/api/mine/segments", {
+      params: decamelizeKeys(params),
+    });
   }
 }

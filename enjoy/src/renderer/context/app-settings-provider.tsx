@@ -1,10 +1,9 @@
-import { createContext, useEffect, useState, useRef } from "react";
-import { toast } from "@renderer/components/ui";
-import { WEB_API_URL } from "@/constants";
+import { createContext, useEffect, useState } from "react";
+import { WEB_API_URL, LANGUAGES } from "@/constants";
 import { Client } from "@/api";
 import i18n from "@renderer/i18n";
-import { FFmpeg } from "@ffmpeg/ffmpeg";
-import { toBlobURL } from "@ffmpeg/util";
+import ahoy from "ahoy.js";
+import { type Consumer, createConsumer } from "@rails/actioncable";
 
 type AppSettingsProviderState = {
   webApi: Client;
@@ -16,13 +15,17 @@ type AppSettingsProviderState = {
   login?: (user: UserType) => void;
   logout?: () => void;
   setLibraryPath?: (path: string) => Promise<void>;
-  ffmpegWasm?: FFmpeg;
-  ffmpegValid?: boolean;
   EnjoyApp?: EnjoyAppType;
   language?: "en" | "zh-CN";
   switchLanguage?: (language: "en" | "zh-CN") => void;
+  nativeLanguage?: string;
+  switchNativeLanguage?: (lang: string) => void;
+  learningLanguage?: string;
+  switchLearningLanguage?: (lang: string) => void;
   proxy?: ProxyConfigType;
   setProxy?: (config: ProxyConfigType) => Promise<void>;
+  cable?: Consumer;
+  ahoy?: typeof ahoy;
 };
 
 const initialState: AppSettingsProviderState = {
@@ -39,32 +42,25 @@ export const AppSettingsProvider = ({
 }: {
   children: React.ReactNode;
 }) => {
-  const [initialized, setInitialized] = useState<boolean>(false);
   const [version, setVersion] = useState<string>("");
   const [apiUrl, setApiUrl] = useState<string>(WEB_API_URL);
   const [webApi, setWebApi] = useState<Client>(null);
+  const [cable, setCable] = useState<Consumer>();
   const [user, setUser] = useState<UserType | null>(null);
   const [libraryPath, setLibraryPath] = useState("");
-  const [ffmpegWasm, setFfmpegWasm] = useState<FFmpeg>(null);
-  const [ffmpegValid, setFfmpegValid] = useState<boolean>(false);
   const [language, setLanguage] = useState<"en" | "zh-CN">();
+  const [nativeLanguage, setNativeLanguage] = useState<string>("zh-CN");
+  const [learningLanguage, setLearningLanguage] = useState<string>("en-US");
   const [proxy, setProxy] = useState<ProxyConfigType>();
   const EnjoyApp = window.__ENJOY_APP__;
-
-  const ffmpegRef = useRef(new FFmpeg());
 
   useEffect(() => {
     fetchVersion();
     fetchUser();
     fetchLibraryPath();
-    fetchLanguage();
-    prepareFfmpeg();
+    fetchLanguages();
     fetchProxyConfig();
   }, []);
-
-  useEffect(() => {
-    validate();
-  }, [user, libraryPath]);
 
   useEffect(() => {
     if (!apiUrl) return;
@@ -78,50 +74,26 @@ export const AppSettingsProvider = ({
     );
   }, [user, apiUrl, language]);
 
-  const prepareFfmpeg = async () => {
-    const valid = await EnjoyApp.ffmpeg.check();
-    setFfmpegValid(valid);
+  useEffect(() => {
+    if (!apiUrl) return;
 
-    if (!valid) {
-      loadFfmpegWASM();
-    }
-  };
-
-  const loadFfmpegWASM = async () => {
-    const baseURL = "assets/libs";
-    ffmpegRef.current.on("log", ({ message }) => {
-      console.log(message);
+    ahoy.configure({
+      urlPrefix: apiUrl,
     });
+  }, [apiUrl]);
 
-    const coreURL = await toBlobURL(
-      `${baseURL}/ffmpeg-core.js`,
-      "text/javascript"
-    );
-    const wasmURL = await toBlobURL(
-      `${baseURL}/ffmpeg-core.wasm`,
-      "application/wasm"
-    );
-    const workerURL = await toBlobURL(
-      `${baseURL}/ffmpeg-core.worker.js`,
-      "text/javascript"
-    );
-
-    try {
-      await ffmpegRef.current.load({
-        coreURL,
-        wasmURL,
-        workerURL,
-      });
-      setFfmpegWasm(ffmpegRef.current);
-    } catch (err) {
-      toast.error(err.message);
-    }
-  };
-
-  const fetchLanguage = async () => {
+  const fetchLanguages = async () => {
     const language = await EnjoyApp.settings.getLanguage();
     setLanguage(language as "en" | "zh-CN");
     i18n.changeLanguage(language);
+
+    const _nativeLanguage =
+      (await EnjoyApp.settings.get("nativeLanguage")) || "zh-CN";
+    setNativeLanguage(_nativeLanguage);
+
+    const _learningLanguage =
+      (await EnjoyApp.settings.get("learningLanguage")) || "en-US";
+    setLearningLanguage(_learningLanguage);
   };
 
   const switchLanguage = (language: "en" | "zh-CN") => {
@@ -129,6 +101,22 @@ export const AppSettingsProvider = ({
       i18n.changeLanguage(language);
       setLanguage(language);
     });
+  };
+
+  const switchNativeLanguage = (lang: string) => {
+    if (LANGUAGES.findIndex((l) => l.code == lang) < 0) return;
+    if (lang == learningLanguage) return;
+
+    setNativeLanguage(lang);
+    EnjoyApp.settings.set("nativeLanguage", lang);
+  };
+
+  const switchLearningLanguage = (lang: string) => {
+    if (LANGUAGES.findIndex((l) => l.code == lang) < 0) return;
+    if (lang == nativeLanguage) return;
+
+    EnjoyApp.settings.set("learningLanguage", lang);
+    setLearningLanguage(lang);
   };
 
   const fetchVersion = async () => {
@@ -150,7 +138,7 @@ export const AppSettingsProvider = ({
 
     client.me().then((user) => {
       if (user?.id) {
-        login(currentUser);
+        login(Object.assign({}, currentUser, user));
       } else {
         logout();
       }
@@ -160,6 +148,7 @@ export const AppSettingsProvider = ({
   const login = (user: UserType) => {
     setUser(user);
     EnjoyApp.settings.setUser(user);
+    createCable(user.accessToken);
   };
 
   const logout = () => {
@@ -188,8 +177,10 @@ export const AppSettingsProvider = ({
     });
   };
 
-  const validate = async () => {
-    setInitialized(Boolean(user && libraryPath));
+  const createCable = async (token: string) => {
+    const wsUrl = await EnjoyApp.app.wsUrl();
+    const consumer = createConsumer(wsUrl + "/cable?token=" + token);
+    setCable(consumer);
   };
 
   return (
@@ -197,6 +188,10 @@ export const AppSettingsProvider = ({
       value={{
         language,
         switchLanguage,
+        nativeLanguage,
+        switchNativeLanguage,
+        learningLanguage,
+        switchLearningLanguage,
         EnjoyApp,
         version,
         webApi,
@@ -206,11 +201,11 @@ export const AppSettingsProvider = ({
         logout,
         libraryPath,
         setLibraryPath: setLibraryPathHandler,
-        ffmpegValid,
-        ffmpegWasm,
         proxy,
         setProxy: setProxyConfigHandler,
-        initialized,
+        initialized: Boolean(user && libraryPath),
+        ahoy,
+        cable,
       }}
     >
       {children}

@@ -4,13 +4,11 @@ import Calendar, {
   Skeleton,
   ThemeInput,
 } from "react-activity-calendar";
-import { AppSettingsProviderContext } from "@renderer/context";
+import { AppSettingsProviderContext, useTheme } from "@renderer/context";
 import { ScrollArea, Button } from "@renderer/components/ui";
-import i18next, { t } from "i18next";
-import dayjs, { Dayjs } from "dayjs";
-import "dayjs/locale/en";
-import "dayjs/locale/zh-cn";
-import localeData from "dayjs/plugin/localeData";
+import { t } from "i18next";
+import dayjs from "@renderer/lib/dayjs";
+import { Dayjs } from "dayjs";
 import { Tooltip } from "react-tooltip";
 
 const DEFAULT_THEME: ThemeInput = {
@@ -22,9 +20,7 @@ export const RecordingCalendar = (props: {
   onSelectRange?: (from: string, to: string) => void;
 }) => {
   const { onSelectRange } = props;
-
-  dayjs.extend(localeData);
-  dayjs.locale(i18next.resolvedLanguage?.toLowerCase() || "en");
+  const { colorScheme } = useTheme();
 
   const [tab, setTab] = useState<string | number>("lastYear");
   const [range, setRange] = useState<[Dayjs, Dayjs]>([
@@ -135,6 +131,7 @@ export const RecordingCalendar = (props: {
           }),
         }}
         theme={DEFAULT_THEME}
+        colorScheme={colorScheme as "light" | "dark"}
         renderBlock={(block, activity) =>
           React.cloneElement(block, {
             ...block.props,

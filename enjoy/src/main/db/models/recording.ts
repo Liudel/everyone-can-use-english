@@ -25,7 +25,9 @@ import storage from "@main/storage";
 import { Client } from "@/api";
 import { WEB_API_URL } from "@/constants";
 import { AzureSpeechSdk } from "@main/azure-speech-sdk";
+import echogarden from "@main/echogarden";
 import camelcaseKeys from "camelcase-keys";
+import { t } from "i18next";
 
 const logger = log.scope("db/models/recording");
 
@@ -145,7 +147,7 @@ export class Recording extends Model<Recording> {
     });
   }
 
-  async assess() {
+  async assess(language?: string) {
     const assessment = await PronunciationAssessment.findOne({
       where: { targetId: this.id, targetType: "Recording" },
     });
@@ -154,7 +156,6 @@ export class Recording extends Model<Recording> {
       return assessment;
     }
 
-    await this.upload();
     await this.sync();
     const webApi = new Client({
       baseUrl: process.env.WEB_API_URL || WEB_API_URL,
@@ -162,12 +163,16 @@ export class Recording extends Model<Recording> {
       logger,
     });
 
-    const { token, region } = await webApi.generateSpeechToken();
+    const { token, region } = await webApi.generateSpeechToken({
+      targetId: this.id,
+      targetType: "Recording",
+    });
     const sdk = new AzureSpeechSdk(token, region);
 
     const result = await sdk.pronunciationAssessment({
       filePath: this.filePath,
       reference: this.referenceText,
+      language,
     });
 
     const resultJson = camelcaseKeys(
@@ -296,19 +301,45 @@ export class Recording extends Model<Recording> {
       referenceText?: string;
     }
   ) {
-    const { targetId, targetType, referenceId, referenceText, duration } =
-      params;
+    const { targetId, targetType, referenceId, referenceText } = params;
+    let { duration } = params;
 
-    const format = blob.type.split("/")[1];
+    if (blob.arrayBuffer.byteLength === 0) {
+      throw new Error("Empty recording");
+    }
+
+    let rawAudio = await echogarden.ensureRawAudio(
+      Buffer.from(blob.arrayBuffer)
+    );
+
+    // trim audio
+    let trimmedSamples = echogarden.trimAudioStart(
+      rawAudio.audioChannels[0],
+      0,
+      -35
+    );
+    trimmedSamples = echogarden.trimAudioEnd(trimmedSamples, 0, -35);
+    rawAudio.audioChannels[0] = trimmedSamples;
+
+    duration = Math.round(echogarden.getRawAudioDuration(rawAudio) * 1000);
+
+    if (duration === 0) {
+      throw new Error(t("models.recording.cannotDetectAnySound"));
+    }
+
+    // save recording to file
     const file = path.join(
       settings.userDataPath(),
       "recordings",
-      `${Date.now()}.${format}`
+      `${Date.now()}.wav`
     );
-    await fs.outputFile(file, Buffer.from(blob.arrayBuffer));
+    await fs.outputFile(file, echogarden.encodeRawAudioToWave(rawAudio));
 
+    // hash file
     const md5 = await hashFile(file, { algo: "md5" });
-    const filename = `${md5}.${format}`;
+
+    // rename file
+    const filename = `${md5}.wav`;
     fs.renameSync(file, path.join(path.dirname(file), filename));
 
     return this.create(

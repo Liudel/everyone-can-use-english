@@ -67,6 +67,20 @@ class RecordingsHandler {
       });
   }
 
+  private async sync(_event: IpcMainEvent, id: string) {
+    const recording = await Recording.findOne({
+      where: {
+        id,
+      },
+    });
+
+    if (!recording) {
+      throw new Error(t("models.recording.notFound"));
+    }
+
+    return await recording.sync();
+  }
+
   private async syncAll(event: IpcMainEvent) {
     const recordings = await Recording.findAll({
       where: { syncedAt: null },
@@ -98,7 +112,7 @@ class RecordingsHandler {
   }
 
   private async create(
-    event: IpcMainEvent,
+    _event: IpcMainEvent,
     options: Attributes<Recording> & {
       blob: {
         type: string;
@@ -108,28 +122,20 @@ class RecordingsHandler {
   ) {
     const { targetId, targetType, referenceId, referenceText, duration } =
       options;
-    return Recording.createFromBlob(options.blob, {
+    const recording = await Recording.createFromBlob(options.blob, {
       targetId,
       targetType,
       referenceId,
       referenceText,
       duration,
-    })
-      .then((recording) => {
-        if (!recording) {
-          throw new Error(t("models.recording.failedToSave"));
-        }
-        return recording.toJSON();
-      })
-      .catch((err) => {
-        event.sender.send("on-notification", {
-          type: "error",
-          message: err.message,
-        });
-      });
+    });
+    if (!recording) {
+      throw new Error(t("models.recording.failedToSave"));
+    }
+    return recording.toJSON();
   }
 
-  private async destroy(event: IpcMainEvent, id: string) {
+  private async destroy(_event: IpcMainEvent, id: string) {
     const recording = await Recording.findOne({
       where: {
         id,
@@ -137,20 +143,13 @@ class RecordingsHandler {
     });
 
     if (!recording) {
-      event.sender.send("on-notification", {
-        type: "error",
-        message: t("models.recording.notFound"),
-      });
+      throw new Error(t("models.recording.notFound"));
     }
-    return recording.destroy().catch((err) => {
-      event.sender.send("on-notification", {
-        type: "error",
-        message: err.message,
-      });
-    });
+
+    await recording.destroy();
   }
 
-  private async upload(event: IpcMainEvent, id: string) {
+  private async upload(_event: IpcMainEvent, id: string) {
     const recording = await Recording.findOne({
       where: {
         id,
@@ -158,26 +157,13 @@ class RecordingsHandler {
     });
 
     if (!recording) {
-      event.sender.send("on-notification", {
-        type: "error",
-        message: t("models.recording.notFound"),
-      });
+      throw new Error(t("models.recording.notFound"));
     }
 
-    recording
-      .upload()
-      .then((res) => {
-        return res;
-      })
-      .catch((err) => {
-        event.sender.send("on-notification", {
-          type: "error",
-          message: err.message,
-        });
-      });
+    return await recording.upload();
   }
 
-  private async assess(event: IpcMainEvent, id: string) {
+  private async assess(event: IpcMainEvent, id: string, language?: string) {
     const recording = await Recording.findOne({
       where: {
         id,
@@ -192,7 +178,7 @@ class RecordingsHandler {
     }
 
     return recording
-      .assess()
+      .assess(language)
       .then((res) => {
         return res;
       })
@@ -361,6 +347,7 @@ class RecordingsHandler {
   register() {
     ipcMain.handle("recordings-find-all", this.findAll);
     ipcMain.handle("recordings-find-one", this.findOne);
+    ipcMain.handle("recordings-sync", this.sync);
     ipcMain.handle("recordings-sync-all", this.syncAll);
     ipcMain.handle("recordings-create", this.create);
     ipcMain.handle("recordings-destroy", this.destroy);

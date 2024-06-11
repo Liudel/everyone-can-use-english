@@ -6,11 +6,13 @@ import {
   PostMedium,
   PostStory,
   PostOptions,
+  PostNote,
 } from "@renderer/components";
 import { Avatar, AvatarImage, AvatarFallback } from "@renderer/components/ui";
 import { formatDateTime } from "@renderer/lib/utils";
 import { t } from "i18next";
 import Markdown from "react-markdown";
+import { Link } from "react-router-dom";
 
 export const PostCard = (props: {
   post: PostType;
@@ -20,15 +22,17 @@ export const PostCard = (props: {
   const { user } = useContext(AppSettingsProviderContext);
 
   return (
-    <div className="rounded p-4 bg-background space-y-3">
+    <div className="p-4 rounded-lg space-y-3 hover:bg-muted">
       <div className="flex items-center justify-between">
         <div className="flex items-center space-x-2">
-          <Avatar>
-            <AvatarImage src={post.user.avatarUrl} />
-            <AvatarFallback className="text-xl">
-              {post.user.name[0].toUpperCase()}
-            </AvatarFallback>
-          </Avatar>
+          <Link to={`/users/${post.user.id}`}>
+            <Avatar>
+              <AvatarImage src={post.user.avatarUrl} />
+              <AvatarFallback className="text-xl">
+                {post.user.name[0].toUpperCase()}
+              </AvatarFallback>
+            </Avatar>
+          </Link>
           <div className="flex flex-col justify-between">
             <div className="">{post.user.name}</div>
             <div className="text-xs text-muted-foreground">
@@ -47,9 +51,28 @@ export const PostCard = (props: {
           <div className="text-xs text-muted-foreground">
             {t("sharedPrompt")}
           </div>
-          <Markdown className="prose prose-slate prose-pre:whitespace-normal select-text">
+          <Markdown className="prose prose-slate prose-pre:whitespace-pre-line dark:prose-invert select-text">
             {"```prompt\n" + post.metadata.content + "\n```"}
           </Markdown>
+        </>
+      )}
+
+      {post.metadata?.type === "gpt" && (
+        <>
+          <div className="text-xs text-muted-foreground">{t("sharedGpt")}</div>
+          <div className="text-sm">
+            {t("models.conversation.roleDefinition")}:
+          </div>
+          <div className="prose prose-stone prose-pre:whitespace-pre-line dark:prose-invert select-text">
+            <blockquote className="not-italic whitespace-pre-line">
+              <Markdown>
+                {
+                  (post.metadata.content as { [key: string]: any })
+                    .configuration?.roleDefinition
+                }
+              </Markdown>
+            </blockquote>
+          </div>
         </>
       )}
 
@@ -72,6 +95,15 @@ export const PostCard = (props: {
             {t("sharedStory")}
           </div>
           <PostStory story={post.target as StoryType} />
+        </>
+      )}
+
+      {post.targetType == "Note" && (
+        <>
+          <div className="text-xs text-muted-foreground">
+            {t("sharedNote")}
+          </div>
+          <PostNote note={post.target as NoteType} />
         </>
       )}
 

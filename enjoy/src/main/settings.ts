@@ -68,8 +68,8 @@ const whisperConfig = (): WhisperConfigType => {
   ) as WhisperConfigType["service"];
 
   if (!service) {
-    settings.setSync("whisper.service", "local");
-    service = "local";
+    settings.setSync("whisper.service", "azure");
+    service = "azure";
   }
 
   return {
@@ -94,6 +94,14 @@ const userDataPath = () => {
 
 export default {
   registerIpcHandlers: () => {
+    ipcMain.handle("settings-get", (_event, key) => {
+      return settings.getSync(key);
+    });
+
+    ipcMain.handle("settings-set", (_event, key, value) => {
+      settings.setSync(key, value);
+    });
+
     ipcMain.handle("settings-get-library", (_event) => {
       libraryPath();
       return settings.getSync("library");
@@ -151,6 +159,22 @@ export default {
 
     ipcMain.handle("settings-set-default-engine", (_event, engine) => {
       return settings.setSync("defaultEngine", engine);
+    });
+
+    ipcMain.handle("settings-get-gpt-engine", (_event) => {
+      return settings.getSync("engine.gpt");
+    });
+
+    ipcMain.handle("settings-set-gpt-engine", (_event, engine) => {
+      return settings.setSync("engine.gpt", engine);
+    });
+
+    ipcMain.handle("settings-get-default-hotkeys", (_event) => {
+      return settings.getSync("defaultHotkeys");
+    });
+
+    ipcMain.handle("settings-set-default-hotkeys", (_event, records) => {
+      return settings.setSync("defaultHotkeys", records);
     });
   },
   cachePath,
